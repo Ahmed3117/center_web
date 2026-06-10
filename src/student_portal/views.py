@@ -110,7 +110,6 @@ class StudentSelfProfileView(generics.RetrieveAPIView):
         ).prefetch_related(
             'subscriptions__group__subject',
             'subscriptions__group__center',
-            'subscriptions__group__schedules',
             'attendance_records__session__group__center',
             'exam_results__exam__group__center',
             'payments'
@@ -180,6 +179,4 @@ class StudentSelfSubscriptionsView(generics.ListAPIView):
     def get_queryset(self):
         return GroupSubscription.objects.filter(
             student=self.request.user.student_profile
-        ).select_related('group__subject', 'group__center').prefetch_related(
-            'group__schedules'
-        )
+        ).select_related('group__subject', 'group__center')

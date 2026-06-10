@@ -1,0 +1,93 @@
+{% extends "admin/base_site.html" %}
+{% load i18n admin_urls %}
+
+{% block extrastyle %}
+  {{ block.super }}
+  <style>
+    .import-container {
+      max-width: 800px;
+      margin: 20px 0;
+      background: var(--body-bg, #fff);
+      border: 1px solid var(--border-color, #ccc);
+      border-radius: 4px;
+      padding: 20px;
+    }
+    .import-container h1 {
+      margin-top: 0;
+      color: var(--primary, #79aec8);
+    }
+    .form-row {
+      padding: 15px 0;
+      border-bottom: 1px solid var(--hairline-color, #eee);
+    }
+    .form-row label {
+      display: inline-block;
+      width: 160px;
+      font-weight: bold;
+      vertical-align: middle;
+    }
+    .form-row input[type="file"] {
+      vertical-align: middle;
+    }
+    .submit-row {
+      margin-top: 20px;
+      padding: 15px 0 0 0;
+      text-align: right;
+    }
+    .submit-row .closelink {
+      display: inline-block;
+      margin-left: 15px;
+      line-height: 35px;
+      color: var(--link-color, #447e9b);
+    }
+    .notes-box {
+      margin-top: 30px;
+      background: var(--selected-row, #f9f9f9);
+      border-left: 4px solid var(--primary, #79aec8);
+      padding: 15px;
+      border-radius: 2px;
+    }
+  </style>
+{% endblock %}
+
+{% block breadcrumbs %}
+<div class="breadcrumbs">
+  <a href="{% url 'admin:index' %}">{% translate 'Home' %}</a>
+  &rsaquo; <a href="{% url 'admin:app_list' app_label=opts.app_label %}">{{ opts.app_config.verbose_name }}</a>
+  &rsaquo; <a href="{% url 'admin:dashboard_classgroup_changelist' %}">{{ opts.verbose_name_plural|capfirst }}</a>
+  &rsaquo; استيراد بيانات تجريبية (Import Dummy Data)
+</div>
+{% endblock %}
+
+{% block content %}
+<div id="content-main">
+  <div class="import-container">
+    <h1>استيراد بيانات تجريبية (Import Dummy Data)</h1>
+    <p>قم برفع ملف JSON يحتوي على البيانات التجريبية لتهيئة الخادم السحابي/الإنتاج.</p>
+    
+    <form action="" method="post" enctype="multipart/form-data">
+      {% csrf_token %}
+      
+      <div class="form-row">
+        <label for="json_file">ملف JSON (JSON File):</label>
+        <input type="file" name="json_file" id="json_file" accept=".json" required>
+      </div>
+      
+      <div class="submit-row">
+        <input type="submit" class="default" value="رفع واستيراد البيانات (Upload & Import)" style="background: var(--primary, #79aec8); padding: 10px 20px; border: none; color: #fff; cursor: pointer; border-radius: 4px; font-weight: bold;">
+        <a href="{% url 'admin:dashboard_classgroup_changelist' %}" class="closelink">إلغاء (Cancel)</a>
+      </div>
+    </form>
+    
+    <div class="notes-box">
+      <h3>⚠️ ملحوظة هامة (Important Notes):</h3>
+      <ul>
+        <li>يجب أن يكون الملف بصيغة <strong>JSON</strong> صالحة.</li>
+        <li>سيقوم النظام بعملية **تحديث أو إضافة (Upsert)** للبيانات بناءً على المعرف الرئيسي (Primary Key).</li>
+        <li>في حال وجود بيانات قديمة بنفس المعرف، سيتم تحديثها بالبيانات الجديدة دون مسحها.</li>
+        <li>سيتم ربط الطلاب بحسابات مستخدمين (Django Auth Users) تلقائياً باستخدام اسم المستخدم وكلمة المرور المحددة في الملف.</li>
+      </ul>
+    </div>
+  </div>
+</div>
+{% endblock %}

@@ -108,26 +108,6 @@ class ClassGroup(models.Model):
         return f"{self.name} ({self.subject.name} - {self.center.name})"
 
 
-class GroupSchedule(models.Model):
-    """مواعيد المجموعة"""
-    id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
-    group = models.ForeignKey(
-        ClassGroup, 
-        on_delete=models.CASCADE, 
-        related_name='schedules', 
-        verbose_name="المجموعة"
-    )
-    day_of_week = models.CharField(max_length=50, verbose_name="اليوم")
-    start_time = models.TimeField(verbose_name="وقت البدء")
-
-    class Meta:
-        verbose_name = "موعد المجموعة"
-        verbose_name_plural = "مواعيد المجموعات"
-
-    def __str__(self):
-        return f"{self.group.name} - {self.day_of_week} at {self.start_time}"
-
-
 class Student(models.Model):
     """الطالب"""
     # Using CharField as PK to handle custom scanner or typed student codes (كود الطالب)

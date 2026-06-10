@@ -6,7 +6,6 @@ from .models import (
     Teacher,
     AcademicCenter,
     ClassGroup,
-    GroupSchedule,
     Student,
     GroupSubscription,
     Session,
@@ -44,10 +43,6 @@ class TeacherSerializer(serializers.ModelSerializer):
         fields = ['id', 'name']
 
 
-class GroupScheduleSerializer(serializers.ModelSerializer):
-    class Meta:
-        model = GroupSchedule
-        fields = ['day_of_week', 'start_time']
 
 # ----------------- STUDENT SERIALIZERS -----------------
 
@@ -166,7 +161,6 @@ class ClassGroupListSerializer(serializers.ModelSerializer):
     center = AcademicCenterSerializer(read_only=True)
     teacher = serializers.CharField(source='teacher.name')
     student_count = serializers.SerializerMethodField()
-    schedules = GroupScheduleSerializer(many=True, read_only=True)
 
     class Meta:
         model = ClassGroup
@@ -177,8 +171,7 @@ class ClassGroupListSerializer(serializers.ModelSerializer):
             'subject',
             'center',
             'teacher',
-            'student_count',
-            'schedules'
+            'student_count'
         ]
 
     def get_student_count(self, obj):

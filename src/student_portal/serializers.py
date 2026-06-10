@@ -6,7 +6,7 @@ from dashboard.models import (
     ExamResult,
     Payment,
 )
-from dashboard.serializers import AcademicYearSerializer, GroupScheduleSerializer
+from dashboard.serializers import AcademicYearSerializer
 
 
 class StudentSelfSubscriptionSerializer(serializers.ModelSerializer):
@@ -15,7 +15,6 @@ class StudentSelfSubscriptionSerializer(serializers.ModelSerializer):
     group_name = serializers.SerializerMethodField()
     subject_name = serializers.CharField(source='group.subject.name')
     center_name = serializers.CharField(source='group.center.name')
-    schedules = GroupScheduleSerializer(source='group.schedules', many=True, read_only=True)
 
     class Meta:
         model = GroupSubscription
@@ -26,7 +25,6 @@ class StudentSelfSubscriptionSerializer(serializers.ModelSerializer):
             'center_name',
             'subscription_type',
             'price',
-            'schedules',
             'created_at'
         ]
 

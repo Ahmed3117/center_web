@@ -16,8 +16,10 @@ Including another URLconf
 """
 from django.contrib import admin
 from django.urls import path, include
+from dashboard.views import admin_import_dummy_data_view
 
 urlpatterns = [
+    path('admin/import-dummy-data/', admin_import_dummy_data_view, name='admin_import_dummy_data'),
     path('admin/', admin.site.urls),
     path('api/v1/', include('dashboard.urls')),
     path('api/v1/student/', include('student_portal.urls')),

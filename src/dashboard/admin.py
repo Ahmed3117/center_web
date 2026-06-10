@@ -5,7 +5,6 @@ from .models import (
     Teacher,
     AcademicCenter,
     ClassGroup,
-    GroupSchedule,
     Student,
     GroupSubscription,
     Session,
@@ -16,13 +15,6 @@ from .models import (
 )
 
 # ----------------- INLINES -----------------
-
-class GroupScheduleInline(admin.TabularInline):
-    model = GroupSchedule
-    extra = 1
-    verbose_name = "موعد الحصة"
-    verbose_name_plural = "مواعيد الحصص الأسبوعية"
-
 
 class GroupSubscriptionInline(admin.TabularInline):
     model = GroupSubscription
@@ -86,8 +78,8 @@ class ClassGroupAdmin(admin.ModelAdmin):
     list_display = ('name', 'subject', 'academic_year', 'center', 'teacher', 'get_student_count', 'created_at')
     list_filter = ('academic_year', 'subject', 'center', 'teacher')
     search_fields = ('name', 'subject__name', 'center__name')
-    inlines = [GroupScheduleInline]
     readonly_fields = ('created_at',)
+    change_list_template = "admin/dashboard/classgroup/change_list.html"
 
     def get_student_count(self, obj):
         return obj.subscriptions.count()
