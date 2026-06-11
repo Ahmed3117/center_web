@@ -27,7 +27,9 @@ class Subject(models.Model):
     name = models.CharField(max_length=100, verbose_name="اسم المادة")
     academic_year = models.ForeignKey(
         AcademicYear, 
-        on_delete=models.CASCADE, 
+        on_delete=models.SET_NULL, 
+        null=True,
+        blank=True,
         related_name='subjects', 
         verbose_name="الصف الدراسي"
     )
@@ -38,7 +40,9 @@ class Subject(models.Model):
         ordering = ['name']
 
     def __str__(self):
-        return f"{self.name} - {self.academic_year.name}"
+        if self.academic_year:
+            return f"{self.name} - {self.academic_year.name}"
+        return self.name
 
 
 class Teacher(models.Model):
