@@ -11,7 +11,7 @@ from dashboard.serializers import AcademicYearSerializer
 
 class StudentSelfSubscriptionSerializer(serializers.ModelSerializer):
     """Subscription details for the student's own profile"""
-    group_id = serializers.UUIDField(source='group.id')
+    group_id = serializers.CharField(source='group.id')
     group_name = serializers.SerializerMethodField()
     subject_name = serializers.CharField(source='group.subject.name')
     center_name = serializers.CharField(source='group.center.name')
@@ -34,7 +34,7 @@ class StudentSelfSubscriptionSerializer(serializers.ModelSerializer):
 
 class StudentSelfAttendanceSerializer(serializers.ModelSerializer):
     """Attendance record for the student's own history"""
-    session_id = serializers.UUIDField(source='session.id')
+    session_id = serializers.CharField(source='session.id')
     session_date = serializers.DateTimeField(source='session.session_date')
     group_name = serializers.SerializerMethodField()
     status = serializers.CharField(source='session.status')
@@ -56,7 +56,7 @@ class StudentSelfAttendanceSerializer(serializers.ModelSerializer):
 
 class StudentSelfExamResultSerializer(serializers.ModelSerializer):
     """Exam result for the student's own history"""
-    exam_id = serializers.UUIDField(source='exam.id')
+    exam_id = serializers.CharField(source='exam.id')
     exam_name = serializers.CharField(source='exam.name')
     exam_date = serializers.DateField(source='exam.exam_date')
     max_score = serializers.DecimalField(source='exam.max_score', max_digits=6, decimal_places=2)

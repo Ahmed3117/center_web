@@ -65,7 +65,7 @@ class StudentListSerializer(serializers.ModelSerializer):
 
 class StudentSubscriptionSerializer(serializers.ModelSerializer):
     """Nested subscription detail inside Student Profile"""
-    group_id = serializers.UUIDField(source='group.id')
+    group_id = serializers.CharField(source='group.id')
     group_name = serializers.SerializerMethodField()
     subject_name = serializers.CharField(source='group.subject.name')
 
@@ -86,7 +86,7 @@ class StudentSubscriptionSerializer(serializers.ModelSerializer):
 
 class StudentAttendanceSerializer(serializers.ModelSerializer):
     """Nested attendance details inside Student Profile"""
-    session_id = serializers.UUIDField(source='session.id')
+    session_id = serializers.CharField(source='session.id')
     session_date = serializers.DateTimeField(source='session.session_date')
     group_name = serializers.SerializerMethodField()
 
@@ -195,7 +195,7 @@ class GroupEnrolledStudentSerializer(serializers.ModelSerializer):
 
 class GroupSessionSerializer(serializers.ModelSerializer):
     """Nested past sessions lists inside Group Profile"""
-    session_id = serializers.UUIDField(source='id', read_only=True)
+    session_id = serializers.CharField(source='id', read_only=True)
     attendance_summary = serializers.SerializerMethodField()
 
     class Meta:
@@ -250,7 +250,7 @@ class SessionAttendanceRecordSerializer(serializers.ModelSerializer):
 
 class SessionAttendanceSerializer(serializers.ModelSerializer):
     """Serializer for Session Attendance view"""
-    session_id = serializers.UUIDField(source='id', read_only=True)
+    session_id = serializers.CharField(source='id', read_only=True)
     group_name = serializers.CharField(source='group.name')
     attendance_list = SessionAttendanceRecordSerializer(source='attendance_records', many=True, read_only=True)
 
@@ -313,7 +313,7 @@ class ExamResultDetailSerializer(serializers.ModelSerializer):
 
 class ExamDetailSerializer(serializers.ModelSerializer):
     """Serializer for Exam Results Detailed View"""
-    exam_id = serializers.UUIDField(source='id', read_only=True)
+    exam_id = serializers.CharField(source='id', read_only=True)
     exam_name = serializers.CharField(source='name')
     results = ExamResultDetailSerializer(many=True, read_only=True)
 

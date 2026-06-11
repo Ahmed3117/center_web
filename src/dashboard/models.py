@@ -8,7 +8,7 @@ from django.utils import timezone
 
 class AcademicYear(models.Model):
     """الصف الدراسي"""
-    id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
+    id = models.CharField(primary_key=True, max_length=100, default=uuid.uuid4, editable=False)
     name = models.CharField(max_length=100, verbose_name="اسم الصف الدراسي")
     level = models.IntegerField(verbose_name="المستوى الدراسي")
 
@@ -23,7 +23,7 @@ class AcademicYear(models.Model):
 
 class Subject(models.Model):
     """المادة الدراسية"""
-    id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
+    id = models.CharField(primary_key=True, max_length=100, default=uuid.uuid4, editable=False)
     name = models.CharField(max_length=100, verbose_name="اسم المادة")
     academic_year = models.ForeignKey(
         AcademicYear, 
@@ -43,7 +43,7 @@ class Subject(models.Model):
 
 class Teacher(models.Model):
     """المدرس"""
-    id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
+    id = models.CharField(primary_key=True, max_length=100, default=uuid.uuid4, editable=False)
     name = models.CharField(max_length=150, verbose_name="اسم المدرس")
 
     class Meta:
@@ -57,7 +57,7 @@ class Teacher(models.Model):
 
 class AcademicCenter(models.Model):
     """السنتر / المركز التعليمي"""
-    id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
+    id = models.CharField(primary_key=True, max_length=100, default=uuid.uuid4, editable=False)
     name = models.CharField(max_length=150, verbose_name="اسم السنتر")
     location = models.CharField(max_length=255, blank=True, null=True, verbose_name="موقع السنتر")
 
@@ -72,7 +72,7 @@ class AcademicCenter(models.Model):
 
 class ClassGroup(models.Model):
     """المجموعة"""
-    id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
+    id = models.CharField(primary_key=True, max_length=100, default=uuid.uuid4, editable=False)
     name = models.CharField(max_length=150, verbose_name="اسم المجموعة")
     academic_year = models.ForeignKey(
         AcademicYear, 
@@ -155,7 +155,7 @@ class GroupSubscription(models.Model):
         ('إعفاء', 'إعفاء'),
     ]
 
-    id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
+    id = models.CharField(primary_key=True, max_length=100, default=uuid.uuid4, editable=False)
     student = models.ForeignKey(
         Student, 
         on_delete=models.CASCADE, 
@@ -188,7 +188,7 @@ class GroupSubscription(models.Model):
 
 class Session(models.Model):
     """الحصة الفعلية"""
-    id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
+    id = models.CharField(primary_key=True, max_length=100, default=uuid.uuid4, editable=False)
     group = models.ForeignKey(
         ClassGroup, 
         on_delete=models.CASCADE, 
@@ -209,7 +209,7 @@ class Session(models.Model):
 
 class Attendance(models.Model):
     """حضور الطالب وغيابه في الحصة"""
-    id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
+    id = models.CharField(primary_key=True, max_length=100, default=uuid.uuid4, editable=False)
     session = models.ForeignKey(
         Session, 
         on_delete=models.CASCADE, 
@@ -237,7 +237,7 @@ class Attendance(models.Model):
 
 class Exam(models.Model):
     """الامتحان"""
-    id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
+    id = models.CharField(primary_key=True, max_length=100, default=uuid.uuid4, editable=False)
     group = models.ForeignKey(
         ClassGroup, 
         on_delete=models.CASCADE, 
@@ -259,7 +259,7 @@ class Exam(models.Model):
 
 class ExamResult(models.Model):
     """نتيجة امتحان الطالب"""
-    id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
+    id = models.CharField(primary_key=True, max_length=100, default=uuid.uuid4, editable=False)
     exam = models.ForeignKey(
         Exam, 
         on_delete=models.CASCADE, 
@@ -285,7 +285,7 @@ class ExamResult(models.Model):
 
 class Payment(models.Model):
     """المدفوعات"""
-    id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
+    id = models.CharField(primary_key=True, max_length=100, default=uuid.uuid4, editable=False)
     student = models.ForeignKey(
         Student, 
         on_delete=models.CASCADE, 

@@ -38,14 +38,14 @@ urlpatterns = [
 
     # Groups Directory
     path('groups/', ClassGroupListView.as_view(), name='group-list'),
-    path('groups/<uuid:id>/', ClassGroupDetailView.as_view(), name='group-detail'),
+    path('groups/<str:id>/', ClassGroupDetailView.as_view(), name='group-detail'),
 
     # Session Attendance Detail
-    path('sessions/<uuid:id>/attendance/', SessionAttendanceView.as_view(), name='session-attendance'),
+    path('sessions/<str:id>/attendance/', SessionAttendanceView.as_view(), name='session-attendance'),
 
     # Exams Directory
     path('exams/', ExamListView.as_view(), name='exam-list'),
-    path('exams/<uuid:id>/results/', ExamDetailView.as_view(), name='exam-results'),
+    path('exams/<str:id>/results/', ExamDetailView.as_view(), name='exam-results'),
 
     # Desktop Sync Endpoints
     path('sync/upsert/', DesktopSyncUpsertView.as_view(), name='sync-upsert'),
