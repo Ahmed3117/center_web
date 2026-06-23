@@ -17,6 +17,13 @@ from .models import (
 
 # ----------------- BASIC HELPERS -----------------
 
+class TeacherPublicSerializer(serializers.ModelSerializer):
+    """Public teacher info — used on homepage for students to select a teacher"""
+    class Meta:
+        model = Teacher
+        fields = ['id', 'name', 'slug']
+
+
 class AcademicYearSerializer(serializers.ModelSerializer):
     class Meta:
         model = AcademicYear
@@ -40,7 +47,7 @@ class SubjectSerializer(serializers.ModelSerializer):
 class TeacherSerializer(serializers.ModelSerializer):
     class Meta:
         model = Teacher
-        fields = ['id', 'name']
+        fields = ['id', 'name', 'slug']
 
 
 
@@ -49,17 +56,20 @@ class TeacherSerializer(serializers.ModelSerializer):
 class StudentListSerializer(serializers.ModelSerializer):
     """Serializer for Student List View"""
     academic_year = AcademicYearSerializer(read_only=True)
+    teacher = TeacherPublicSerializer(read_only=True)
 
     class Meta:
         model = Student
         fields = [
+            'id',
             'student_id',
             'full_name',
             'phone_number',
             'parent_phone_number',
             'academic_year',
             'section',
-            'created_at'
+            'created_at',
+            'teacher'
         ]
 
 
@@ -132,6 +142,7 @@ class StudentPaymentSerializer(serializers.ModelSerializer):
 class StudentDetailSerializer(serializers.ModelSerializer):
     """Serializer for Complete Student Profile Detail View"""
     academic_year = AcademicYearSerializer(read_only=True)
+    teacher = TeacherPublicSerializer(read_only=True)
     subscriptions = StudentSubscriptionSerializer(many=True, read_only=True)
     attendance_history = StudentAttendanceSerializer(source='attendance_records', many=True, read_only=True)
     exam_results = StudentExamResultSerializer(many=True, read_only=True)
@@ -140,12 +151,14 @@ class StudentDetailSerializer(serializers.ModelSerializer):
     class Meta:
         model = Student
         fields = [
+            'id',
             'student_id',
             'full_name',
             'phone_number',
             'parent_phone_number',
             'academic_year',
             'section',
+            'teacher',
             'subscriptions',
             'attendance_history',
             'exam_results',
@@ -159,7 +172,7 @@ class ClassGroupListSerializer(serializers.ModelSerializer):
     academic_year = serializers.CharField(source='academic_year.name')
     subject = serializers.CharField(source='subject.name')
     center = AcademicCenterSerializer(read_only=True)
-    teacher = serializers.CharField(source='teacher.name')
+    teacher = TeacherPublicSerializer(read_only=True)
     student_count = serializers.SerializerMethodField()
 
     class Meta:
@@ -218,6 +231,7 @@ class ClassGroupDetailSerializer(serializers.ModelSerializer):
     """Serializer for Detailed Group view"""
     center_name = serializers.CharField(source='center.name')
     subject_name = serializers.CharField(source='subject.name')
+    teacher = TeacherPublicSerializer(read_only=True)
     enrolled_students = GroupEnrolledStudentSerializer(source='subscriptions', many=True, read_only=True)
     sessions = GroupSessionSerializer(many=True, read_only=True)
 
@@ -228,6 +242,7 @@ class ClassGroupDetailSerializer(serializers.ModelSerializer):
             'name',
             'center_name',
             'subject_name',
+            'teacher',
             'enrolled_students',
             'sessions'
         ]
@@ -236,6 +251,7 @@ class ClassGroupDetailSerializer(serializers.ModelSerializer):
 
 class SessionAttendanceRecordSerializer(serializers.ModelSerializer):
     """Single attendance record item in a Session"""
+    student_id = serializers.CharField(source='student.student_id')
     student_name = serializers.CharField(source='student.full_name')
 
     class Meta:
@@ -300,6 +316,7 @@ class ExamListSerializer(serializers.ModelSerializer):
 
 class ExamResultDetailSerializer(serializers.ModelSerializer):
     """Nested student score inside Exam Result Detailed View"""
+    student_id = serializers.CharField(source='student.student_id')
     student_name = serializers.CharField(source='student.full_name')
 
     class Meta:
@@ -325,4 +342,3 @@ class ExamDetailSerializer(serializers.ModelSerializer):
             'max_score',
             'results'
         ]
-

@@ -32,6 +32,7 @@ from .serializers import (
     AcademicYearSerializer,
     SubjectSerializer,
     TeacherSerializer,
+    TeacherPublicSerializer,
     AcademicCenterSerializer,
     StudentListSerializer,
     StudentDetailSerializer,
@@ -46,18 +47,37 @@ logger = logging.getLogger(__name__)
 
 
 # =============================================================================
+#  PUBLIC VIEWS  (no auth required)
+# =============================================================================
+
+class TeacherPublicListView(generics.ListAPIView):
+    """
+    GET /api/v1/public/teachers/
+    List all teachers — used by students on the homepage to select a teacher.
+    """
+    permission_classes = [AllowAny]
+    queryset = Teacher.objects.all()
+    serializer_class = TeacherPublicSerializer
+    filter_backends = [SearchFilter, OrderingFilter]
+    search_fields = ['name']
+    ordering_fields = ['name']
+    pagination_class = None  # No pagination for public teacher list
+
+
+# =============================================================================
 #  DASHBOARD / ADMIN VIEWS  (staff-only)
 # =============================================================================
 
 class AcademicYearListView(generics.ListAPIView):
     """
     GET /api/v1/academic-years/
-    List all academic years (grade levels).
+    List all academic years (grade levels). Supports teacher filtering.
     """
     permission_classes = [IsAuthenticated, IsAdminUser]
-    queryset = AcademicYear.objects.all()
+    queryset = AcademicYear.objects.select_related('teacher').all()
     serializer_class = AcademicYearSerializer
     filter_backends = [DjangoFilterBackend, SearchFilter, OrderingFilter]
+    filterset_fields = ['level', 'teacher_id', 'teacher__slug']
     search_fields = ['name']
     ordering_fields = ['level', 'name']
 
@@ -65,13 +85,13 @@ class AcademicYearListView(generics.ListAPIView):
 class SubjectListView(generics.ListAPIView):
     """
     GET /api/v1/subjects/
-    List all subjects. Allows filtering by academic year.
+    List all subjects. Allows filtering by academic year and teacher.
     """
     permission_classes = [IsAuthenticated, IsAdminUser]
-    queryset = Subject.objects.select_related('academic_year').all()
+    queryset = Subject.objects.select_related('academic_year', 'teacher').all()
     serializer_class = SubjectSerializer
     filter_backends = [DjangoFilterBackend, SearchFilter, OrderingFilter]
-    filterset_fields = ['academic_year_id']
+    filterset_fields = ['academic_year_id', 'academic_year__level', 'teacher_id', 'teacher__slug']
     search_fields = ['name']
     ordering_fields = ['name']
 
@@ -79,25 +99,26 @@ class SubjectListView(generics.ListAPIView):
 class TeacherListView(generics.ListAPIView):
     """
     GET /api/v1/teachers/
-    List all teachers.
+    List all teachers (admin view).
     """
     permission_classes = [IsAuthenticated, IsAdminUser]
     queryset = Teacher.objects.all()
     serializer_class = TeacherSerializer
     filter_backends = [DjangoFilterBackend, SearchFilter, OrderingFilter]
-    search_fields = ['name']
+    search_fields = ['name', 'slug']
     ordering_fields = ['name']
 
 
 class AcademicCenterListView(generics.ListAPIView):
     """
     GET /api/v1/centers/
-    List all academic centers.
+    List all academic centers. Supports teacher filtering.
     """
     permission_classes = [IsAuthenticated, IsAdminUser]
-    queryset = AcademicCenter.objects.all()
+    queryset = AcademicCenter.objects.select_related('teacher').all()
     serializer_class = AcademicCenterSerializer
     filter_backends = [DjangoFilterBackend, SearchFilter, OrderingFilter]
+    filterset_fields = ['teacher_id', 'teacher__slug']
     search_fields = ['name', 'location']
     ordering_fields = ['name']
 
@@ -105,25 +126,30 @@ class AcademicCenterListView(generics.ListAPIView):
 class StudentListView(generics.ListAPIView):
     """
     GET /api/v1/students/
-    List & search students. Allows filtering by academic year and enrolled groups.
+    List & search students. Allows filtering by academic year, teacher, and enrolled groups.
     """
     permission_classes = [IsAuthenticated, IsAdminUser]
-    queryset = Student.objects.select_related('academic_year').all().order_by('student_id')
+    queryset = Student.objects.select_related('academic_year', 'teacher').all().order_by('student_id')
     serializer_class = StudentListSerializer
     filter_backends = [DjangoFilterBackend, SearchFilter, OrderingFilter]
-    filterset_fields = ['academic_year_id', 'subscriptions__group_id']
+    filterset_fields = [
+        'academic_year_id', 'academic_year__level', 'section',
+        'subscriptions__group_id', 'subscriptions__group__center_id',
+        'subscriptions__group__subject_id', 'subscriptions__subscription_type',
+        'teacher_id', 'teacher__slug',
+    ]
     search_fields = ['student_id', 'full_name', 'phone_number', 'parent_phone_number']
     ordering_fields = ['created_at', 'full_name', 'student_id']
 
 
 class StudentDetailView(generics.RetrieveAPIView):
     """
-    GET /api/v1/students/{student_id}/
+    GET /api/v1/students/{pk}/
     Retrieve complete student profile with sub-entities.
     """
     permission_classes = [IsAuthenticated, IsAdminUser]
     queryset = Student.objects.select_related(
-        'academic_year'
+        'academic_year', 'teacher'
     ).prefetch_related(
         'subscriptions__group__subject',
         'subscriptions__group__center',
@@ -132,13 +158,13 @@ class StudentDetailView(generics.RetrieveAPIView):
         'payments'
     ).all()
     serializer_class = StudentDetailSerializer
-    lookup_field = 'student_id'
+    lookup_field = 'pk'
 
 
 class ClassGroupListView(generics.ListAPIView):
     """
     GET /api/v1/groups/
-    List all class groups. Allows filtering by academic year, subject, and physical center.
+    List all class groups. Allows filtering by academic year, subject, center, and teacher.
     """
     permission_classes = [IsAuthenticated, IsAdminUser]
     queryset = ClassGroup.objects.select_related(
@@ -146,7 +172,11 @@ class ClassGroupListView(generics.ListAPIView):
     ).all().order_by('name')
     serializer_class = ClassGroupListSerializer
     filter_backends = [DjangoFilterBackend, SearchFilter, OrderingFilter]
-    filterset_fields = ['academic_year_id', 'subject_id', 'center_id']
+    filterset_fields = [
+        'academic_year_id', 'academic_year__level',
+        'subject_id', 'center_id',
+        'teacher_id', 'teacher__slug',
+    ]
     search_fields = ['name', 'subject__name', 'center__name', 'teacher__name']
     ordering_fields = ['created_at', 'name']
 
@@ -158,7 +188,7 @@ class ClassGroupDetailView(generics.RetrieveAPIView):
     """
     permission_classes = [IsAuthenticated, IsAdminUser]
     queryset = ClassGroup.objects.select_related(
-        'center', 'subject'
+        'center', 'subject', 'teacher'
     ).prefetch_related(
         'subscriptions__student',
         'sessions__attendance_records'
@@ -183,13 +213,17 @@ class SessionAttendanceView(generics.RetrieveAPIView):
 class ExamListView(generics.ListAPIView):
     """
     GET /api/v1/exams/
-    List all exams. Allows filtering by class group.
+    List all exams. Allows filtering by class group and teacher.
     """
     permission_classes = [IsAuthenticated, IsAdminUser]
-    queryset = Exam.objects.select_related('group__center').prefetch_related('results').all()
+    queryset = Exam.objects.select_related('group__center', 'teacher').prefetch_related('results').all()
     serializer_class = ExamListSerializer
     filter_backends = [DjangoFilterBackend, SearchFilter, OrderingFilter]
-    filterset_fields = ['group_id']
+    filterset_fields = [
+        'group_id', 'group__center_id', 'group__subject_id',
+        'group__academic_year_id', 'group__academic_year__level',
+        'exam_date', 'teacher_id', 'teacher__slug',
+    ]
     search_fields = ['name', 'group__name']
     ordering_fields = ['exam_date', 'name', 'max_score']
 
@@ -209,22 +243,37 @@ class DashboardStatsView(views.APIView):
     """
     GET /api/v1/dashboard/stats/
     Retrieve overview summary stats for the landing page.
+    Supports optional teacher filtering via ?teacher_id= or ?teacher_slug=
     """
     permission_classes = [IsAuthenticated, IsAdminUser]
 
     def get(self, request, *args, **kwargs):
-        total_students = Student.objects.count()
-        total_groups = ClassGroup.objects.count()
-        active_centers = AcademicCenter.objects.count()
+        teacher_id = request.query_params.get('teacher_id')
+        teacher_slug = request.query_params.get('teacher_slug')
+
+        students_qs = Student.objects.all()
+        groups_qs = ClassGroup.objects.all()
+        centers_qs = AcademicCenter.objects.all()
+        sessions_qs = Session.objects.all()
+
+        if teacher_id:
+            students_qs = students_qs.filter(teacher_id=teacher_id)
+            groups_qs = groups_qs.filter(teacher_id=teacher_id)
+            centers_qs = centers_qs.filter(teacher_id=teacher_id)
+            sessions_qs = sessions_qs.filter(teacher_id=teacher_id)
+        elif teacher_slug:
+            students_qs = students_qs.filter(teacher__slug=teacher_slug)
+            groups_qs = groups_qs.filter(teacher__slug=teacher_slug)
+            centers_qs = centers_qs.filter(teacher__slug=teacher_slug)
+            sessions_qs = sessions_qs.filter(teacher__slug=teacher_slug)
 
         today = timezone.localdate()
-        today_sessions_count = Session.objects.filter(session_date__date=today).count()
 
         return Response({
-            "total_students": total_students,
-            "total_groups": total_groups,
-            "active_centers": active_centers,
-            "today_sessions_count": today_sessions_count
+            "total_students": students_qs.count(),
+            "total_groups": groups_qs.count(),
+            "active_centers": centers_qs.count(),
+            "today_sessions_count": sessions_qs.filter(session_date__date=today).count()
         })
 
 
@@ -279,17 +328,23 @@ class DashboardLoginView(views.APIView):
 
 
 # =============================================================================
-#  DESKTOP SYNC VIEWS  (staff-only)
+#  DESKTOP SYNC VIEWS  (token-auth)
 # =============================================================================
 
-from .sync_utils import MODEL_REGISTRY, run_sync_upsert
+from .sync_utils import MODEL_REGISTRY, run_sync_upsert, _resolve_or_create_teacher
 
 
 class DesktopSyncUpsertView(views.APIView):
     """
     POST /api/v1/sync/upsert/
     Atomic transactional API to receive batch payloads from the desktop application
-    and upsert them in strict dependency order.
+    and upsert them in strict dependency order, scoped to a teacher.
+
+    Payload:
+    {
+        "teacher": {"name": "أحمد عيسى", "slug": "1234567890"},
+        "data": { ... }
+    }
     """
     permission_classes = [AllowAny]
 
@@ -303,11 +358,19 @@ class DesktopSyncUpsertView(views.APIView):
                 status=status.HTTP_401_UNAUTHORIZED
             )
 
+        # Resolve teacher from payload
+        teacher_data = request.data.get('teacher')
+        teacher, error = _resolve_or_create_teacher(teacher_data)
+        if error:
+            return Response({
+                "status": "failed",
+                "error": error
+            }, status=status.HTTP_400_BAD_REQUEST)
+
         payload_data = request.data.get('data', {})
-        center_id = request.data.get('center_id')
 
         success, upserted_counts, skipped_records, error_message = run_sync_upsert(
-            payload_data, center_id
+            payload_data, teacher
         )
 
         if not success:
@@ -318,6 +381,10 @@ class DesktopSyncUpsertView(views.APIView):
 
         response_data = {
             "status": "success",
+            "teacher": {
+                "name": teacher.name,
+                "slug": teacher.slug,
+            },
             "upserted_counts": upserted_counts
         }
         if skipped_records:
@@ -330,7 +397,13 @@ class DesktopSyncDeleteView(views.APIView):
     """
     POST /api/v1/sync/delete/
     API to execute batch hard-deletes of records deleted offline on the desktop application.
-    Student deletions also clean up the linked auth User (via post_delete signal).
+    Scoped to a teacher.
+
+    Payload:
+    {
+        "teacher": {"slug": "1234567890"},
+        "deleted_records": [...]
+    }
     """
     permission_classes = [AllowAny]
 
@@ -343,19 +416,27 @@ class DesktopSyncDeleteView(views.APIView):
                 status=status.HTTP_401_UNAUTHORIZED
             )
 
+        # Resolve teacher from payload
+        teacher_data = request.data.get('teacher')
+        if not teacher_data or not teacher_data.get('slug'):
+            return Response({
+                "status": "failed",
+                "error": "Missing teacher slug in payload"
+            }, status=status.HTTP_400_BAD_REQUEST)
+
+        teacher = Teacher.objects.filter(slug=teacher_data['slug']).first()
+        if not teacher:
+            return Response({
+                "status": "failed",
+                "error": f"Teacher with slug={teacher_data['slug']} not found"
+            }, status=status.HTTP_404_NOT_FOUND)
+
         deleted_records = request.data.get('deleted_records', [])
-        center_id = request.data.get('center_id')
         deleted_count = 0
         not_found_records = []
 
         try:
             with transaction.atomic():
-                if center_id and not AcademicCenter.objects.filter(pk=center_id).exists():
-                    logger.warning(
-                        "Delete payload center_id=%s does not match any AcademicCenter record.",
-                        center_id
-                    )
-
                 for record in deleted_records:
                     model_key = record.get('model_name')
                     item_id = record.get('deleted_item_id')
@@ -375,10 +456,11 @@ class DesktopSyncDeleteView(views.APIView):
                         })
                         continue
 
+                    # Build lookup scoped to teacher
                     if model_key == 'STUDENT':
-                        lookup_kwargs = {'student_id': item_id}
+                        lookup_kwargs = {'teacher': teacher, 'student_id': item_id}
                     else:
-                        lookup_kwargs = {'id': item_id}
+                        lookup_kwargs = {'teacher': teacher, 'desktop_id': item_id}
 
                     deleted_rows, _ = model_class.objects.filter(**lookup_kwargs).delete()
                     if deleted_rows > 0:
@@ -386,7 +468,7 @@ class DesktopSyncDeleteView(views.APIView):
                     else:
                         not_found_records.append({
                             'record': record,
-                            'reason': 'Record not found in database (may have been previously deleted)'
+                            'reason': 'Record not found for this teacher (may have been previously deleted)'
                         })
 
             response_data = {
@@ -426,19 +508,25 @@ def admin_import_dummy_data_view(request):
             messages.error(request, f"خطأ في قراءة ملف JSON: {str(e)}")
             return redirect('/admin/')
         
-        data = payload.get('data') if 'data' in payload else payload
-        center_id = payload.get('center_id')
+        # Resolve teacher from payload
+        teacher_data = payload.get('teacher')
+        teacher, error = _resolve_or_create_teacher(teacher_data)
+        if error:
+            messages.error(request, f"خطأ في بيانات المدرس: {error}")
+            return redirect('/admin/')
         
-        success, upserted_counts, skipped_records, error_message = run_sync_upsert(data, center_id)
+        data = payload.get('data', {})
+        
+        success, upserted_counts, skipped_records, error_message = run_sync_upsert(data, teacher)
         
         if success:
             summary = ", ".join([f"{k}: {v}" for k, v in upserted_counts.items() if v > 0])
-            msg = f"تم استيراد البيانات التجريبية بنجاح! السجلات المحدثة/المضافة: {summary or 'لا يوجد جديد'}"
+            msg = f"تم استيراد البيانات بنجاح للمدرس: {teacher.name}! السجلات: {summary or 'لا يوجد جديد'}"
             if skipped_records:
-                msg += f" (تنبيه: تم تخطي {len(skipped_records)} سجل بسبب أخطاء تعارض أو نقص بيانات)"
+                msg += f" (تنبيه: تم تخطي {len(skipped_records)} سجل)"
             messages.success(request, msg)
         else:
-            messages.error(request, f"فشل استيراد البيانات التجريبية: {error_message}")
+            messages.error(request, f"فشل استيراد البيانات: {error_message}")
             
         return redirect('/admin/')
 
@@ -458,4 +546,3 @@ def admin_import_dummy_data_view(request):
         'user': request.user,
     }
     return render(request, 'admin/dashboard/import_dummy_data.html', context)
-

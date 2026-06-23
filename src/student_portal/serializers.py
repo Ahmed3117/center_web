@@ -5,94 +5,25 @@ from dashboard.models import (
     Attendance,
     ExamResult,
     Payment,
+    Teacher,
 )
-from dashboard.serializers import AcademicYearSerializer
 
 
-class StudentSelfSubscriptionSerializer(serializers.ModelSerializer):
-    """Subscription details for the student's own profile"""
-    group_id = serializers.CharField(source='group.id')
-    group_name = serializers.SerializerMethodField()
-    subject_name = serializers.CharField(source='group.subject.name')
-    center_name = serializers.CharField(source='group.center.name')
-
+class StudentTeacherSerializer(serializers.ModelSerializer):
+    """Teacher info included in student responses"""
     class Meta:
-        model = GroupSubscription
-        fields = [
-            'group_id',
-            'group_name',
-            'subject_name',
-            'center_name',
-            'subscription_type',
-            'price',
-            'created_at'
-        ]
-
-    def get_group_name(self, obj):
-        return f"{obj.group.name} ({obj.group.center.name})"
-
-
-class StudentSelfAttendanceSerializer(serializers.ModelSerializer):
-    """Attendance record for the student's own history"""
-    session_id = serializers.CharField(source='session.id')
-    session_date = serializers.DateTimeField(source='session.session_date')
-    group_name = serializers.SerializerMethodField()
-    status = serializers.CharField(source='session.status')
-
-    class Meta:
-        model = Attendance
-        fields = [
-            'session_id',
-            'session_date',
-            'group_name',
-            'is_present',
-            'notes',
-            'status'
-        ]
-
-    def get_group_name(self, obj):
-        return f"{obj.session.group.name} ({obj.session.group.center.name})"
-
-
-class StudentSelfExamResultSerializer(serializers.ModelSerializer):
-    """Exam result for the student's own history"""
-    exam_id = serializers.CharField(source='exam.id')
-    exam_name = serializers.CharField(source='exam.name')
-    exam_date = serializers.DateField(source='exam.exam_date')
-    max_score = serializers.DecimalField(source='exam.max_score', max_digits=6, decimal_places=2)
-    group_name = serializers.SerializerMethodField()
-
-    class Meta:
-        model = ExamResult
-        fields = [
-            'exam_id',
-            'exam_name',
-            'exam_date',
-            'student_score',
-            'max_score',
-            'group_name'
-        ]
-
-    def get_group_name(self, obj):
-        return f"{obj.exam.group.name} ({obj.exam.group.center.name})"
-
-
-class StudentSelfPaymentSerializer(serializers.ModelSerializer):
-    """Payment record for the student's own history"""
-    class Meta:
-        model = Payment
-        fields = ['id', 'amount', 'payment_date', 'description']
+        model = Teacher
+        fields = ['name', 'slug']
 
 
 class StudentSelfProfileSerializer(serializers.ModelSerializer):
-    """Full profile for a logged-in student — all their info in one response"""
-    academic_year = AcademicYearSerializer(read_only=True)
-    subscriptions = StudentSelfSubscriptionSerializer(many=True, read_only=True)
-    attendance_history = StudentSelfAttendanceSerializer(
-        source='attendance_records', many=True, read_only=True
-    )
-    exam_results = StudentSelfExamResultSerializer(many=True, read_only=True)
-    payments = StudentSelfPaymentSerializer(many=True, read_only=True)
+    """Full Student Self-Profile — all related data in one call"""
+    academic_year = serializers.CharField(source='academic_year.name')
+    teacher = StudentTeacherSerializer(read_only=True)
+    subscriptions = serializers.SerializerMethodField()
+    attendance_history = serializers.SerializerMethodField()
+    exam_results = serializers.SerializerMethodField()
+    payments = serializers.SerializerMethodField()
 
     class Meta:
         model = Student
@@ -103,8 +34,98 @@ class StudentSelfProfileSerializer(serializers.ModelSerializer):
             'parent_phone_number',
             'academic_year',
             'section',
+            'teacher',
             'subscriptions',
             'attendance_history',
             'exam_results',
             'payments'
+        ]
+
+    def get_subscriptions(self, obj):
+        return StudentSelfSubscriptionSerializer(
+            obj.subscriptions.select_related('group__subject', 'group__center'),
+            many=True
+        ).data
+
+    def get_attendance_history(self, obj):
+        return StudentSelfAttendanceSerializer(
+            obj.attendance_records.select_related('session__group__center').order_by('-session__session_date'),
+            many=True
+        ).data
+
+    def get_exam_results(self, obj):
+        return StudentSelfExamResultSerializer(
+            obj.exam_results.select_related('exam__group').order_by('-exam__exam_date'),
+            many=True
+        ).data
+
+    def get_payments(self, obj):
+        return StudentSelfPaymentSerializer(
+            obj.payments.order_by('-payment_date'),
+            many=True
+        ).data
+
+
+class StudentSelfSubscriptionSerializer(serializers.ModelSerializer):
+    """Single subscription item for a student"""
+    group_name = serializers.SerializerMethodField()
+    subject_name = serializers.CharField(source='group.subject.name')
+    center_name = serializers.CharField(source='group.center.name')
+
+    class Meta:
+        model = GroupSubscription
+        fields = [
+            'group_name',
+            'subject_name',
+            'center_name',
+            'subscription_type',
+            'price'
+        ]
+
+    def get_group_name(self, obj):
+        return obj.group.name
+
+
+class StudentSelfAttendanceSerializer(serializers.ModelSerializer):
+    """Single attendance record for a student"""
+    session_date = serializers.DateTimeField(source='session.session_date')
+    group_name = serializers.SerializerMethodField()
+
+    class Meta:
+        model = Attendance
+        fields = [
+            'session_date',
+            'group_name',
+            'is_present',
+            'notes'
+        ]
+
+    def get_group_name(self, obj):
+        return f"{obj.session.group.name} ({obj.session.group.center.name})"
+
+
+class StudentSelfExamResultSerializer(serializers.ModelSerializer):
+    """Single exam result for a student"""
+    exam_name = serializers.CharField(source='exam.name')
+    exam_date = serializers.DateField(source='exam.exam_date')
+    max_score = serializers.DecimalField(source='exam.max_score', max_digits=6, decimal_places=2)
+
+    class Meta:
+        model = ExamResult
+        fields = [
+            'exam_name',
+            'exam_date',
+            'student_score',
+            'max_score'
+        ]
+
+
+class StudentSelfPaymentSerializer(serializers.ModelSerializer):
+    """Single payment record for a student"""
+    class Meta:
+        model = Payment
+        fields = [
+            'amount',
+            'payment_date',
+            'description'
         ]

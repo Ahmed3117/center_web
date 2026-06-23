@@ -1,5 +1,7 @@
 from django.urls import path
 from .views import (
+    # Public views
+    TeacherPublicListView,
     # Dashboard / Admin views
     DashboardLoginView,
     AcademicYearListView,
@@ -20,6 +22,9 @@ from .views import (
 )
 
 urlpatterns = [
+    # Public Endpoints (no auth required)
+    path('public/teachers/', TeacherPublicListView.as_view(), name='teacher-public-list'),
+
     # Dashboard Authentication
     path('login/', DashboardLoginView.as_view(), name='dashboard-login'),
 
@@ -34,7 +39,7 @@ urlpatterns = [
 
     # Students Directory
     path('students/', StudentListView.as_view(), name='student-list'),
-    path('students/<str:student_id>/', StudentDetailView.as_view(), name='student-detail'),
+    path('students/<str:pk>/', StudentDetailView.as_view(), name='student-detail'),
 
     # Groups Directory
     path('groups/', ClassGroupListView.as_view(), name='group-list'),

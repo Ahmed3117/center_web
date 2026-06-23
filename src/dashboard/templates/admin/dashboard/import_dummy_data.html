@@ -52,7 +52,7 @@
 
 {% block breadcrumbs %}
 <div class="breadcrumbs">
-  <a href="/admin/">{% translate 'Home' %}</a>
+  <a href="{% url 'admin:index' %}">{% translate 'Home' %}</a>
   &rsaquo; استيراد بيانات تجريبية (Import Dummy Data)
 </div>
 {% endblock %}
@@ -73,7 +73,7 @@
       
       <div class="submit-row">
         <input type="submit" class="default" value="رفع واستيراد البيانات (Upload & Import)" style="background: var(--primary, #79aec8); padding: 10px 20px; border: none; color: #fff; cursor: pointer; border-radius: 4px; font-weight: bold;">
-        <a href="/admin/" class="closelink">إلغاء (Cancel)</a>
+        <a href="{% url 'admin:index' %}" class="closelink">إلغاء (Cancel)</a>
       </div>
     </form>
     
@@ -81,8 +81,9 @@
       <h3>⚠️ ملحوظة هامة (Important Notes):</h3>
       <ul>
         <li>يجب أن يكون الملف بصيغة <strong>JSON</strong> صالحة.</li>
-        <li>سيقوم النظام بعملية **تحديث أو إضافة (Upsert)** للبيانات بناءً على المعرف الرئيسي (Primary Key).</li>
-        <li>في حال وجود بيانات قديمة بنفس المعرف، سيتم تحديثها بالبيانات الجديدة دون مسحها.</li>
+        <li>يجب أن يحتوي الملف على حقل <strong>"teacher"</strong> يتضمن اسم المدرس و slug (اختياري).</li>
+        <li>سيقوم النظام بعملية **تحديث أو إضافة (Upsert)** للبيانات بناءً على المعرف المحلي + المدرس.</li>
+        <li>في حال وجود بيانات قديمة بنفس المعرف لنفس المدرس، سيتم تحديثها بالبيانات الجديدة دون مسحها.</li>
         <li>سيتم ربط الطلاب بحسابات مستخدمين (Django Auth Users) تلقائياً باستخدام اسم المستخدم وكلمة المرور المحددة في الملف.</li>
       </ul>
     </div>

@@ -1,3 +1,4 @@
+import random
 import uuid
 from django.contrib.auth.models import User
 from django.db import models
@@ -6,49 +7,11 @@ from django.dispatch import receiver
 from django.utils import timezone
 
 
-class AcademicYear(models.Model):
-    """الصف الدراسي"""
-    id = models.CharField(primary_key=True, max_length=100, default=uuid.uuid4, editable=False)
-    name = models.CharField(max_length=100, verbose_name="اسم الصف الدراسي")
-    level = models.IntegerField(verbose_name="المستوى الدراسي")
-
-    class Meta:
-        verbose_name = "الصف الدراسي"
-        verbose_name_plural = "الصفوف الدراسية"
-        ordering = ['level']
-
-    def __str__(self):
-        return self.name
-
-
-class Subject(models.Model):
-    """المادة الدراسية"""
-    id = models.CharField(primary_key=True, max_length=100, default=uuid.uuid4, editable=False)
-    name = models.CharField(max_length=100, verbose_name="اسم المادة")
-    academic_year = models.ForeignKey(
-        AcademicYear, 
-        on_delete=models.SET_NULL, 
-        null=True,
-        blank=True,
-        related_name='subjects', 
-        verbose_name="الصف الدراسي"
-    )
-
-    class Meta:
-        verbose_name = "المادة الدراسية"
-        verbose_name_plural = "المواد الدراسية"
-        ordering = ['name']
-
-    def __str__(self):
-        if self.academic_year:
-            return f"{self.name} - {self.academic_year.name}"
-        return self.name
-
-
 class Teacher(models.Model):
     """المدرس"""
     id = models.CharField(primary_key=True, max_length=100, default=uuid.uuid4, editable=False)
     name = models.CharField(max_length=150, verbose_name="اسم المدرس")
+    slug = models.CharField(max_length=10, unique=True, blank=True, verbose_name="رابط المدرس")
 
     class Meta:
         verbose_name = "المدرس"
@@ -58,10 +21,85 @@ class Teacher(models.Model):
     def __str__(self):
         return self.name
 
+    def save(self, *args, **kwargs):
+        if not self.slug:
+            self.slug = self._generate_unique_slug()
+        super().save(*args, **kwargs)
+
+    @staticmethod
+    def _generate_unique_slug():
+        for _ in range(100):
+            slug = ''.join(random.choices('0123456789', k=10))
+            if not Teacher.objects.filter(slug=slug).exists():
+                return slug
+        raise ValueError("Could not generate a unique teacher slug after 100 attempts.")
+
+
+class AcademicYear(models.Model):
+    """الصف الدراسي"""
+    id = models.CharField(primary_key=True, max_length=100, default=uuid.uuid4, editable=False)
+    desktop_id = models.CharField(max_length=100, verbose_name="المعرف المحلي")
+    teacher = models.ForeignKey(
+        Teacher,
+        on_delete=models.CASCADE,
+        related_name='academic_years',
+        verbose_name="المدرس"
+    )
+    name = models.CharField(max_length=100, verbose_name="اسم الصف الدراسي")
+    level = models.IntegerField(verbose_name="المستوى الدراسي")
+
+    class Meta:
+        verbose_name = "الصف الدراسي"
+        verbose_name_plural = "الصفوف الدراسية"
+        ordering = ['level']
+        unique_together = ('teacher', 'desktop_id')
+
+    def __str__(self):
+        return self.name
+
+
+class Subject(models.Model):
+    """المادة الدراسية"""
+    id = models.CharField(primary_key=True, max_length=100, default=uuid.uuid4, editable=False)
+    desktop_id = models.CharField(max_length=100, verbose_name="المعرف المحلي")
+    teacher = models.ForeignKey(
+        Teacher,
+        on_delete=models.CASCADE,
+        related_name='subjects',
+        verbose_name="المدرس"
+    )
+    name = models.CharField(max_length=100, verbose_name="اسم المادة")
+    academic_year = models.ForeignKey(
+        AcademicYear,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name='subjects',
+        verbose_name="الصف الدراسي"
+    )
+
+    class Meta:
+        verbose_name = "المادة الدراسية"
+        verbose_name_plural = "المواد الدراسية"
+        ordering = ['name']
+        unique_together = ('teacher', 'desktop_id')
+
+    def __str__(self):
+        if self.academic_year:
+            return f"{self.name} - {self.academic_year.name}"
+        return self.name
+
 
 class AcademicCenter(models.Model):
     """السنتر / المركز التعليمي"""
     id = models.CharField(primary_key=True, max_length=100, default=uuid.uuid4, editable=False)
+    desktop_id = models.CharField(max_length=100, verbose_name="المعرف المحلي")
+    teacher = models.ForeignKey(
+        Teacher,
+        on_delete=models.CASCADE,
+        related_name='centers',
+        verbose_name="المدرس"
+    )
     name = models.CharField(max_length=150, verbose_name="اسم السنتر")
     location = models.CharField(max_length=255, blank=True, null=True, verbose_name="موقع السنتر")
 
@@ -69,6 +107,7 @@ class AcademicCenter(models.Model):
         verbose_name = "السنتر"
         verbose_name_plural = "السناتر / المراكز"
         ordering = ['name']
+        unique_together = ('teacher', 'desktop_id')
 
     def __str__(self):
         return self.name
@@ -77,29 +116,30 @@ class AcademicCenter(models.Model):
 class ClassGroup(models.Model):
     """المجموعة"""
     id = models.CharField(primary_key=True, max_length=100, default=uuid.uuid4, editable=False)
+    desktop_id = models.CharField(max_length=100, verbose_name="المعرف المحلي")
     name = models.CharField(max_length=150, verbose_name="اسم المجموعة")
     academic_year = models.ForeignKey(
-        AcademicYear, 
-        on_delete=models.CASCADE, 
-        related_name='groups', 
+        AcademicYear,
+        on_delete=models.CASCADE,
+        related_name='groups',
         verbose_name="الصف الدراسي"
     )
     subject = models.ForeignKey(
-        Subject, 
-        on_delete=models.CASCADE, 
-        related_name='groups', 
+        Subject,
+        on_delete=models.CASCADE,
+        related_name='groups',
         verbose_name="المادة"
     )
     center = models.ForeignKey(
-        AcademicCenter, 
-        on_delete=models.CASCADE, 
-        related_name='groups', 
+        AcademicCenter,
+        on_delete=models.CASCADE,
+        related_name='groups',
         verbose_name="السنتر"
     )
     teacher = models.ForeignKey(
-        Teacher, 
-        on_delete=models.CASCADE, 
-        related_name='groups', 
+        Teacher,
+        on_delete=models.CASCADE,
+        related_name='groups',
         verbose_name="المدرس"
     )
     created_at = models.DateTimeField(default=timezone.now, verbose_name="تاريخ الإنشاء")
@@ -107,6 +147,7 @@ class ClassGroup(models.Model):
     class Meta:
         verbose_name = "المجموعة"
         verbose_name_plural = "المجموعات"
+        unique_together = ('teacher', 'desktop_id')
 
     def __str__(self):
         return f"{self.name} ({self.subject.name} - {self.center.name})"
@@ -114,15 +155,21 @@ class ClassGroup(models.Model):
 
 class Student(models.Model):
     """الطالب"""
-    # Using CharField as PK to handle custom scanner or typed student codes (كود الطالب)
-    student_id = models.CharField(primary_key=True, max_length=100, verbose_name="كود الطالب")
+    id = models.CharField(primary_key=True, max_length=100, default=uuid.uuid4, editable=False)
+    student_id = models.CharField(max_length=100, verbose_name="كود الطالب")
+    teacher = models.ForeignKey(
+        Teacher,
+        on_delete=models.CASCADE,
+        related_name='students',
+        verbose_name="المدرس"
+    )
     full_name = models.CharField(max_length=255, verbose_name="اسم الطالب")
     phone_number = models.CharField(max_length=50, blank=True, default='', verbose_name="رقم تليفون الطالب")
     parent_phone_number = models.CharField(max_length=50, blank=True, default='', verbose_name="رقم تليفون ولي الأمر")
     academic_year = models.ForeignKey(
-        AcademicYear, 
-        on_delete=models.CASCADE, 
-        related_name='students', 
+        AcademicYear,
+        on_delete=models.CASCADE,
+        related_name='students',
         verbose_name="الصف الدراسي"
     )
     section = models.CharField(max_length=100, blank=True, null=True, verbose_name="الشعبة")
@@ -139,6 +186,7 @@ class Student(models.Model):
     class Meta:
         verbose_name = "الطالب"
         verbose_name_plural = "الطلاب"
+        unique_together = ('teacher', 'student_id')
 
     def __str__(self):
         return f"{self.full_name} ({self.student_id})"
@@ -160,21 +208,28 @@ class GroupSubscription(models.Model):
     ]
 
     id = models.CharField(primary_key=True, max_length=100, default=uuid.uuid4, editable=False)
+    desktop_id = models.CharField(max_length=100, verbose_name="المعرف المحلي")
+    teacher = models.ForeignKey(
+        Teacher,
+        on_delete=models.CASCADE,
+        related_name='subscriptions',
+        verbose_name="المدرس"
+    )
     student = models.ForeignKey(
-        Student, 
-        on_delete=models.CASCADE, 
-        related_name='subscriptions', 
+        Student,
+        on_delete=models.CASCADE,
+        related_name='subscriptions',
         verbose_name="الطالب"
     )
     group = models.ForeignKey(
-        ClassGroup, 
-        on_delete=models.CASCADE, 
-        related_name='subscriptions', 
+        ClassGroup,
+        on_delete=models.CASCADE,
+        related_name='subscriptions',
         verbose_name="المجموعة"
     )
     subscription_type = models.CharField(
-        max_length=50, 
-        choices=SUBSCRIPTION_CHOICES, 
+        max_length=50,
+        choices=SUBSCRIPTION_CHOICES,
         verbose_name="نوع الاشتراك"
     )
     price = models.DecimalField(max_digits=10, decimal_places=2, verbose_name="سعر الاشتراك")
@@ -183,7 +238,7 @@ class GroupSubscription(models.Model):
     class Meta:
         verbose_name = "اشتراك الطالب"
         verbose_name_plural = "اشتراكات الطلاب"
-        unique_together = ('student', 'group')
+        unique_together = ('teacher', 'desktop_id')
         ordering = ['-created_at']
 
     def __str__(self):
@@ -193,10 +248,17 @@ class GroupSubscription(models.Model):
 class Session(models.Model):
     """الحصة الفعلية"""
     id = models.CharField(primary_key=True, max_length=100, default=uuid.uuid4, editable=False)
+    desktop_id = models.CharField(max_length=100, verbose_name="المعرف المحلي")
+    teacher = models.ForeignKey(
+        Teacher,
+        on_delete=models.CASCADE,
+        related_name='sessions',
+        verbose_name="المدرس"
+    )
     group = models.ForeignKey(
-        ClassGroup, 
-        on_delete=models.CASCADE, 
-        related_name='sessions', 
+        ClassGroup,
+        on_delete=models.CASCADE,
+        related_name='sessions',
         verbose_name="المجموعة"
     )
     session_date = models.DateTimeField(verbose_name="تاريخ ووقت الحصة")
@@ -206,6 +268,7 @@ class Session(models.Model):
         verbose_name = "الحصة"
         verbose_name_plural = "سجل الحصص"
         ordering = ['-session_date']
+        unique_together = ('teacher', 'desktop_id')
 
     def __str__(self):
         return f"{self.group.name} - {self.session_date.strftime('%Y-%m-%d %H:%M')}"
@@ -214,16 +277,23 @@ class Session(models.Model):
 class Attendance(models.Model):
     """حضور الطالب وغيابه في الحصة"""
     id = models.CharField(primary_key=True, max_length=100, default=uuid.uuid4, editable=False)
+    desktop_id = models.CharField(max_length=100, verbose_name="المعرف المحلي")
+    teacher = models.ForeignKey(
+        Teacher,
+        on_delete=models.CASCADE,
+        related_name='attendance_records',
+        verbose_name="المدرس"
+    )
     session = models.ForeignKey(
-        Session, 
-        on_delete=models.CASCADE, 
-        related_name='attendance_records', 
+        Session,
+        on_delete=models.CASCADE,
+        related_name='attendance_records',
         verbose_name="الحصة"
     )
     student = models.ForeignKey(
-        Student, 
-        on_delete=models.CASCADE, 
-        related_name='attendance_records', 
+        Student,
+        on_delete=models.CASCADE,
+        related_name='attendance_records',
         verbose_name="الطالب"
     )
     is_present = models.BooleanField(verbose_name="حاضر")
@@ -232,7 +302,7 @@ class Attendance(models.Model):
     class Meta:
         verbose_name = "تسجيل الحضور"
         verbose_name_plural = "حضور وغياب الطلاب"
-        unique_together = ('session', 'student')
+        unique_together = ('teacher', 'desktop_id')
 
     def __str__(self):
         status = "حاضر" if self.is_present else "غائب"
@@ -242,10 +312,17 @@ class Attendance(models.Model):
 class Exam(models.Model):
     """الامتحان"""
     id = models.CharField(primary_key=True, max_length=100, default=uuid.uuid4, editable=False)
+    desktop_id = models.CharField(max_length=100, verbose_name="المعرف المحلي")
+    teacher = models.ForeignKey(
+        Teacher,
+        on_delete=models.CASCADE,
+        related_name='exams',
+        verbose_name="المدرس"
+    )
     group = models.ForeignKey(
-        ClassGroup, 
-        on_delete=models.CASCADE, 
-        related_name='exams', 
+        ClassGroup,
+        on_delete=models.CASCADE,
+        related_name='exams',
         verbose_name="المجموعة"
     )
     name = models.CharField(max_length=150, verbose_name="اسم الامتحان")
@@ -256,6 +333,7 @@ class Exam(models.Model):
         verbose_name = "الامتحان"
         verbose_name_plural = "الامتحانات"
         ordering = ['-exam_date']
+        unique_together = ('teacher', 'desktop_id')
 
     def __str__(self):
         return f"{self.name} - {self.group.name}"
@@ -264,16 +342,23 @@ class Exam(models.Model):
 class ExamResult(models.Model):
     """نتيجة امتحان الطالب"""
     id = models.CharField(primary_key=True, max_length=100, default=uuid.uuid4, editable=False)
+    desktop_id = models.CharField(max_length=100, verbose_name="المعرف المحلي")
+    teacher = models.ForeignKey(
+        Teacher,
+        on_delete=models.CASCADE,
+        related_name='exam_results',
+        verbose_name="المدرس"
+    )
     exam = models.ForeignKey(
-        Exam, 
-        on_delete=models.CASCADE, 
-        related_name='results', 
+        Exam,
+        on_delete=models.CASCADE,
+        related_name='results',
         verbose_name="الامتحان"
     )
     student = models.ForeignKey(
-        Student, 
-        on_delete=models.CASCADE, 
-        related_name='exam_results', 
+        Student,
+        on_delete=models.CASCADE,
+        related_name='exam_results',
         verbose_name="الطالب"
     )
     student_score = models.DecimalField(max_digits=6, decimal_places=2, verbose_name="درجة الطالب")
@@ -281,7 +366,7 @@ class ExamResult(models.Model):
     class Meta:
         verbose_name = "نتيجة الطالب"
         verbose_name_plural = "نتائج الامتحانات"
-        unique_together = ('exam', 'student')
+        unique_together = ('teacher', 'desktop_id')
 
     def __str__(self):
         return f"{self.student.full_name} - {self.exam.name}: {self.student_score}/{self.exam.max_score}"
@@ -290,10 +375,17 @@ class ExamResult(models.Model):
 class Payment(models.Model):
     """المدفوعات"""
     id = models.CharField(primary_key=True, max_length=100, default=uuid.uuid4, editable=False)
+    desktop_id = models.CharField(max_length=100, verbose_name="المعرف المحلي")
+    teacher = models.ForeignKey(
+        Teacher,
+        on_delete=models.CASCADE,
+        related_name='payments',
+        verbose_name="المدرس"
+    )
     student = models.ForeignKey(
-        Student, 
-        on_delete=models.CASCADE, 
-        related_name='payments', 
+        Student,
+        on_delete=models.CASCADE,
+        related_name='payments',
         verbose_name="الطالب"
     )
     amount = models.DecimalField(max_digits=10, decimal_places=2, verbose_name="المبلغ المدفوع")
@@ -304,6 +396,7 @@ class Payment(models.Model):
         verbose_name = "سجل دفع"
         verbose_name_plural = "المدفوعات المالية"
         ordering = ['-payment_date']
+        unique_together = ('teacher', 'desktop_id')
 
     def __str__(self):
         return f"{self.student.full_name} paid {self.amount} on {self.payment_date}"
