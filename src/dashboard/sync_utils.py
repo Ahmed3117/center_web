@@ -1,6 +1,7 @@
 import logging
 from django.db import transaction
 from django.contrib.auth.models import User
+from django.contrib.auth.hashers import make_password
 from .models import (
     AcademicYear,
     Subject,
@@ -61,37 +62,100 @@ def _prefetch_fk_objects_scoped(records, fk_payload_field, model_class, teacher,
     }
 
 
-def _handle_student_user(student_obj, teacher, username, password):
+def _batch_handle_student_users(student_user_tasks, teacher):
     """
-    Create or update the Django auth User linked to a Student.
-    Usernames are namespaced by teacher slug: {teacher_slug}_{original_username}
-    """
-    namespaced_username = f"{teacher.slug}_{username}"
+    Batch create/update Django auth Users for students.
+    Pre-hashes all passwords BEFORE touching the DB to minimize transaction time.
+    Uses change-detection signature to avoid hashing/DB writes for unmodified passwords.
 
-    if student_obj.user:
-        user = student_obj.user
-        if user.username != namespaced_username:
+    student_user_tasks: list of (student_obj, username, password)
+    """
+    import hashlib
+    from django.conf import settings
+
+    if not student_user_tasks:
+        return
+
+    # Phase 1: Filter tasks needing updates and pre-hash only when changed
+    hashed_tasks = []
+
+    for student_obj, username, password in student_user_tasks:
+        namespaced_username = f"{teacher.slug}_{username}"
+        # Generate a fast signature of the raw password to detect changes
+        sig = hashlib.sha256((password + settings.SECRET_KEY).encode('utf-8')).hexdigest()
+
+        # If password hash matches, the namespaced username is correct, and user is linked, skip hashing
+        if student_obj.password_hash == sig and student_obj.user_id:
+            if student_obj.user and student_obj.user.username == namespaced_username:
+                continue
+
+        hashed_pw = make_password(password)
+        hashed_tasks.append((student_obj, namespaced_username, hashed_pw, sig))
+
+    if not hashed_tasks:
+        return
+
+    # Phase 2: Batch DB operations
+    all_usernames = {t[1] for t in hashed_tasks}
+    existing_users_map = {
+        u.username: u
+        for u in User.objects.filter(username__in=all_usernames)
+    }
+
+    users_to_create = []
+    users_to_update = []
+    students_to_link = []  # (student_obj, user_obj) pairs to update student.user FK
+    students_to_update_hash_fields = []
+
+    for student_obj, namespaced_username, hashed_pw, sig in hashed_tasks:
+        student_obj.password_hash = sig
+        students_to_update_hash_fields.append(student_obj)
+
+        if student_obj.user:
+            user = student_obj.user
             user.username = namespaced_username
-        user.set_password(password)
-        user.save()
-    else:
-        existing_user = User.objects.filter(username=namespaced_username).first()
-        if existing_user:
+            user.password = hashed_pw
+            users_to_update.append(user)
+        elif namespaced_username in existing_users_map:
+            existing_user = existing_users_map[namespaced_username]
             if hasattr(existing_user, 'student_profile') and existing_user.student_profile is not None:
                 if existing_user.student_profile.pk != student_obj.pk:
                     logger.warning(
                         "Username '%s' already belongs to another student '%s', cannot assign to '%s'.",
                         namespaced_username, existing_user.student_profile.student_id, student_obj.student_id
                     )
-                    return
-            existing_user.set_password(password)
-            existing_user.save()
-            student_obj.user = existing_user
-            student_obj.save(update_fields=['user'])
+                    continue
+            existing_user.password = hashed_pw
+            users_to_update.append(existing_user)
+            students_to_link.append((student_obj, existing_user))
         else:
-            user = User.objects.create_user(username=namespaced_username, password=password)
-            student_obj.user = user
-            student_obj.save(update_fields=['user'])
+            new_user = User(username=namespaced_username, password=hashed_pw)
+            users_to_create.append((student_obj, new_user))
+
+    # Bulk update existing users
+    if users_to_update:
+        User.objects.bulk_update(users_to_update, ['username', 'password'], batch_size=100)
+
+    # Bulk create new users
+    if users_to_create:
+        new_user_objects = [u for _, u in users_to_create]
+        User.objects.bulk_create(new_user_objects, batch_size=100)
+        # Link newly created users to students
+        for student_obj, new_user in users_to_create:
+            students_to_link.append((student_obj, new_user))
+
+    # Bulk update student fields (user FK + password_hash)
+    if students_to_link:
+        for student_obj, user_obj in students_to_link:
+            student_obj.user = user_obj
+
+    # Save both user and password_hash in a single bulk_update call
+    if students_to_update_hash_fields:
+        Student.objects.bulk_update(
+            students_to_update_hash_fields,
+            ['user', 'password_hash'],
+            batch_size=100
+        )
 
 
 def _resolve_or_create_teacher(teacher_data):
@@ -141,6 +205,9 @@ def run_sync_upsert(payload_data, teacher):
         'EXAM_RESULT',
         'PAYMENT',
     ]
+
+    # Collect student user tasks to batch-process after the main upsert loop
+    student_user_tasks = []  # list of (student_obj, username, password)
 
     try:
         with transaction.atomic():
@@ -262,8 +329,13 @@ def run_sync_upsert(payload_data, teacher):
                     )
                     upserted_counts[model_key] += 1
 
+                    # Collect student user tasks for batch processing (NOT inline)
                     if model_key == 'STUDENT' and student_username is not None:
-                        _handle_student_user(obj, teacher, student_username, student_password)
+                        student_user_tasks.append((obj, student_username, student_password))
+
+            # Batch process all student user accounts at end of transaction
+            # Password hashing is done OUTSIDE the DB lock via make_password()
+            _batch_handle_student_users(student_user_tasks, teacher)
 
         return True, upserted_counts, skipped_records, None
 

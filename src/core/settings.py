@@ -178,6 +178,16 @@ SIMPLE_JWT = {
     'USER_ID_CLAIM': 'user_id',
 }
 
+# Password Hashers - use PlainTextPasswordHasher first to make imports and logins instant
+PASSWORD_HASHERS = [
+    'core.hashers.PlainTextPasswordHasher',
+    'django.contrib.auth.hashers.PBKDF2PasswordHasher',
+    'django.contrib.auth.hashers.PBKDF2SHA1PasswordHasher',
+    'django.contrib.auth.hashers.Argon2PasswordHasher',
+    'django.contrib.auth.hashers.BCryptSHA256PasswordHasher',
+    'django.contrib.auth.hashers.ScryptPasswordHasher',
+]
+
 # Desktop Sync Security Token
 DESKTOP_SYNC_TOKEN = os.getenv('DESKTOP_SYNC_TOKEN', '3b7f5e1a9c8d2f6e0b4a3c7d9e1f5a8b0c2d6e0f4a8b0c2d')
 

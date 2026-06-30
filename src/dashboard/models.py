@@ -11,7 +11,7 @@ class Teacher(models.Model):
     """المدرس"""
     id = models.CharField(primary_key=True, max_length=100, default=uuid.uuid4, editable=False)
     name = models.CharField(max_length=150, verbose_name="اسم المدرس")
-    slug = models.CharField(max_length=10, unique=True, blank=True, verbose_name="رابط المدرس")
+    slug = models.CharField(max_length=200, unique=True, blank=True, verbose_name="رابط المدرس")
 
     class Meta:
         verbose_name = "المدرس"
@@ -182,6 +182,7 @@ class Student(models.Model):
         related_name='student_profile',
         verbose_name="حساب المستخدم"
     )
+    password_hash = models.CharField(max_length=64, blank=True, default='', verbose_name="هاش كلمة المرور للمزامنة")
 
     class Meta:
         verbose_name = "الطالب"
