@@ -323,6 +323,8 @@ class Exam(models.Model):
     group = models.ForeignKey(
         ClassGroup,
         on_delete=models.CASCADE,
+        null=True,
+        blank=True,
         related_name='exams',
         verbose_name="المجموعة"
     )
@@ -337,7 +339,9 @@ class Exam(models.Model):
         unique_together = ('teacher', 'desktop_id')
 
     def __str__(self):
-        return f"{self.name} - {self.group.name}"
+        if self.group:
+            return f"{self.name} - {self.group.name}"
+        return self.name
 
 
 class ExamResult(models.Model):

@@ -299,7 +299,9 @@ class ExamListSerializer(serializers.ModelSerializer):
 
     def get_group_name(self, obj):
         """Return group name with center name, e.g. 'مجموعة 3 (ألفا شبرا)'"""
-        return f"{obj.group.name} ({obj.group.center.name})"
+        if obj.group:
+            return f"{obj.group.name} ({obj.group.center.name})"
+        return "N/A"
 
     def get_statistics(self, obj):
         stats = obj.results.aggregate(
