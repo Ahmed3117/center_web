@@ -49,9 +49,9 @@ class StudentLoginView(views.APIView):
     permission_classes = [AllowAny]
 
     def post(self, request, *args, **kwargs):
-        teacher_slug = request.data.get('teacher_slug', '').strip()
-        username = request.data.get('username', '').strip()
-        password = request.data.get('password', '')
+        teacher_slug = str(request.data.get('teacher_slug') or '').strip()
+        username = str(request.data.get('username') or '').strip()
+        password = str(request.data.get('password') or '')
 
         if not teacher_slug:
             return Response(

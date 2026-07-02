@@ -12,6 +12,14 @@ class Teacher(models.Model):
     id = models.CharField(primary_key=True, max_length=100, default=uuid.uuid4, editable=False)
     name = models.CharField(max_length=150, verbose_name="اسم المدرس")
     slug = models.CharField(max_length=200, unique=True, blank=True, verbose_name="رابط المدرس")
+    user = models.OneToOneField(
+        User,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name='teacher_profile',
+        verbose_name="حساب المستخدم"
+    )
 
     class Meta:
         verbose_name = "المدرس"
@@ -33,6 +41,13 @@ class Teacher(models.Model):
             if not Teacher.objects.filter(slug=slug).exists():
                 return slug
         raise ValueError("Could not generate a unique teacher slug after 100 attempts.")
+
+
+@receiver(post_delete, sender=Teacher)
+def delete_teacher_user_account(sender, instance, **kwargs):
+    """When a Teacher is deleted, also delete their linked auth User account."""
+    if instance.user_id:
+        User.objects.filter(pk=instance.user_id).delete()
 
 
 class AcademicYear(models.Model):

@@ -4,6 +4,7 @@ from .views import (
     TeacherPublicListView,
     # Dashboard / Admin views
     DashboardLoginView,
+    DashboardChangePasswordView,
     AcademicYearListView,
     SubjectListView,
     TeacherListView,
@@ -27,6 +28,7 @@ urlpatterns = [
 
     # Dashboard Authentication
     path('login/', DashboardLoginView.as_view(), name='dashboard-login'),
+    path('dashboard/change-password/', DashboardChangePasswordView.as_view(), name='dashboard-change-password'),
 
     # Dashboard Overview Stats
     path('dashboard/stats/', DashboardStatsView.as_view(), name='dashboard-stats'),

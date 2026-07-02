@@ -17,9 +17,10 @@ from .models import (
 
 @admin.register(Teacher)
 class TeacherAdmin(admin.ModelAdmin):
-    list_display = ('name', 'slug', 'id')
-    search_fields = ('name', 'slug')
+    list_display = ('name', 'slug', 'user', 'id')
+    search_fields = ('name', 'slug', 'user__username')
     readonly_fields = ('id', 'slug')
+    raw_id_fields = ('user',)
 
 
 @admin.register(AcademicYear)

@@ -47,6 +47,49 @@ logger = logging.getLogger(__name__)
 
 
 # =============================================================================
+#  PERMISSIONS & MIXINS
+# =============================================================================
+
+class IsTeacherOrAdmin(IsAuthenticated):
+    """
+    Allow access if the user is:
+    - A superuser (admin)
+    - A user linked to a Teacher record
+    """
+    def has_permission(self, request, view):
+        if not super().has_permission(request, view):
+            return False
+        user = request.user
+        return user.is_superuser or hasattr(user, 'teacher_profile')
+
+
+class TeacherScopedMixin:
+    """
+    Mixin for dashboard views that auto-filters querysets
+    by the logged-in teacher. Superusers see all data and
+    can optionally filter by teacher_id/teacher_slug.
+    """
+    teacher_filter_field = 'teacher'
+
+    def get_queryset(self):
+        qs = super().get_queryset()
+        user = self.request.user
+        if user.is_superuser:
+            # Superusers can optionally filter by teacher
+            teacher_id = self.request.query_params.get('teacher_id')
+            teacher_slug = self.request.query_params.get('teacher_slug')
+            if teacher_id:
+                qs = qs.filter(**{f'{self.teacher_filter_field}_id': teacher_id})
+            elif teacher_slug:
+                qs = qs.filter(**{f'{self.teacher_filter_field}__slug': teacher_slug})
+            return qs
+        # Teacher user → auto-scope to their data only
+        if hasattr(user, 'teacher_profile'):
+            return qs.filter(**{self.teacher_filter_field: user.teacher_profile})
+        return qs.none()
+
+
+# =============================================================================
 #  PUBLIC VIEWS  (no auth required)
 # =============================================================================
 
@@ -68,30 +111,30 @@ class TeacherPublicListView(generics.ListAPIView):
 #  DASHBOARD / ADMIN VIEWS  (staff-only)
 # =============================================================================
 
-class AcademicYearListView(generics.ListAPIView):
+class AcademicYearListView(TeacherScopedMixin, generics.ListAPIView):
     """
     GET /api/v1/academic-years/
-    List all academic years (grade levels). Supports teacher filtering.
+    List all academic years (grade levels). Auto-scoped by logged-in teacher.
     """
-    permission_classes = [IsAuthenticated, IsAdminUser]
+    permission_classes = [IsTeacherOrAdmin]
     queryset = AcademicYear.objects.select_related('teacher').all()
     serializer_class = AcademicYearSerializer
     filter_backends = [DjangoFilterBackend, SearchFilter, OrderingFilter]
-    filterset_fields = ['level', 'teacher_id', 'teacher__slug']
+    filterset_fields = ['level']
     search_fields = ['name']
     ordering_fields = ['level', 'name']
 
 
-class SubjectListView(generics.ListAPIView):
+class SubjectListView(TeacherScopedMixin, generics.ListAPIView):
     """
     GET /api/v1/subjects/
-    List all subjects. Allows filtering by academic year and teacher.
+    List all subjects. Auto-scoped by logged-in teacher.
     """
-    permission_classes = [IsAuthenticated, IsAdminUser]
+    permission_classes = [IsTeacherOrAdmin]
     queryset = Subject.objects.select_related('academic_year', 'teacher').all()
     serializer_class = SubjectSerializer
     filter_backends = [DjangoFilterBackend, SearchFilter, OrderingFilter]
-    filterset_fields = ['academic_year_id', 'academic_year__level', 'teacher_id', 'teacher__slug']
+    filterset_fields = ['academic_year_id', 'academic_year__level']
     search_fields = ['name']
     ordering_fields = ['name']
 
@@ -99,36 +142,43 @@ class SubjectListView(generics.ListAPIView):
 class TeacherListView(generics.ListAPIView):
     """
     GET /api/v1/teachers/
-    List all teachers (admin view).
+    List all teachers. Superusers see all; teachers see only themselves.
     """
-    permission_classes = [IsAuthenticated, IsAdminUser]
-    queryset = Teacher.objects.all()
+    permission_classes = [IsTeacherOrAdmin]
     serializer_class = TeacherSerializer
     filter_backends = [DjangoFilterBackend, SearchFilter, OrderingFilter]
     search_fields = ['name', 'slug']
     ordering_fields = ['name']
 
+    def get_queryset(self):
+        user = self.request.user
+        if user.is_superuser:
+            return Teacher.objects.all()
+        if hasattr(user, 'teacher_profile'):
+            return Teacher.objects.filter(pk=user.teacher_profile.pk)
+        return Teacher.objects.none()
 
-class AcademicCenterListView(generics.ListAPIView):
+
+class AcademicCenterListView(TeacherScopedMixin, generics.ListAPIView):
     """
     GET /api/v1/centers/
-    List all academic centers. Supports teacher filtering.
+    List all academic centers. Auto-scoped by logged-in teacher.
     """
-    permission_classes = [IsAuthenticated, IsAdminUser]
+    permission_classes = [IsTeacherOrAdmin]
     queryset = AcademicCenter.objects.select_related('teacher').all()
     serializer_class = AcademicCenterSerializer
     filter_backends = [DjangoFilterBackend, SearchFilter, OrderingFilter]
-    filterset_fields = ['teacher_id', 'teacher__slug']
+    filterset_fields = []
     search_fields = ['name', 'location']
     ordering_fields = ['name']
 
 
-class StudentListView(generics.ListAPIView):
+class StudentListView(TeacherScopedMixin, generics.ListAPIView):
     """
     GET /api/v1/students/
-    List & search students. Allows filtering by academic year, teacher, and enrolled groups.
+    List & search students. Auto-scoped by logged-in teacher.
     """
-    permission_classes = [IsAuthenticated, IsAdminUser]
+    permission_classes = [IsTeacherOrAdmin]
     queryset = Student.objects.select_related('academic_year', 'teacher').all().order_by('student_id')
     serializer_class = StudentListSerializer
     filter_backends = [DjangoFilterBackend, SearchFilter, OrderingFilter]
@@ -136,18 +186,17 @@ class StudentListView(generics.ListAPIView):
         'academic_year_id', 'academic_year__level', 'section',
         'subscriptions__group_id', 'subscriptions__group__center_id',
         'subscriptions__group__subject_id', 'subscriptions__subscription_type',
-        'teacher_id', 'teacher__slug',
     ]
     search_fields = ['student_id', 'full_name', 'phone_number', 'parent_phone_number']
     ordering_fields = ['created_at', 'full_name', 'student_id']
 
 
-class StudentDetailView(generics.RetrieveAPIView):
+class StudentDetailView(TeacherScopedMixin, generics.RetrieveAPIView):
     """
     GET /api/v1/students/{pk}/
-    Retrieve complete student profile with sub-entities.
+    Retrieve complete student profile with sub-entities. Auto-scoped by logged-in teacher.
     """
-    permission_classes = [IsAuthenticated, IsAdminUser]
+    permission_classes = [IsTeacherOrAdmin]
     queryset = Student.objects.select_related(
         'academic_year', 'teacher'
     ).prefetch_related(
@@ -161,12 +210,12 @@ class StudentDetailView(generics.RetrieveAPIView):
     lookup_field = 'pk'
 
 
-class ClassGroupListView(generics.ListAPIView):
+class ClassGroupListView(TeacherScopedMixin, generics.ListAPIView):
     """
     GET /api/v1/groups/
-    List all class groups. Allows filtering by academic year, subject, center, and teacher.
+    List all class groups. Auto-scoped by logged-in teacher.
     """
-    permission_classes = [IsAuthenticated, IsAdminUser]
+    permission_classes = [IsTeacherOrAdmin]
     queryset = ClassGroup.objects.select_related(
         'academic_year', 'subject', 'center', 'teacher'
     ).all().order_by('name')
@@ -175,18 +224,17 @@ class ClassGroupListView(generics.ListAPIView):
     filterset_fields = [
         'academic_year_id', 'academic_year__level',
         'subject_id', 'center_id',
-        'teacher_id', 'teacher__slug',
     ]
     search_fields = ['name', 'subject__name', 'center__name', 'teacher__name']
     ordering_fields = ['created_at', 'name']
 
 
-class ClassGroupDetailView(generics.RetrieveAPIView):
+class ClassGroupDetailView(TeacherScopedMixin, generics.RetrieveAPIView):
     """
     GET /api/v1/groups/{id}/
-    Retrieve group details: enrolled students, and sessions histories.
+    Retrieve group details: enrolled students, and sessions histories. Auto-scoped by logged-in teacher.
     """
-    permission_classes = [IsAuthenticated, IsAdminUser]
+    permission_classes = [IsTeacherOrAdmin]
     queryset = ClassGroup.objects.select_related(
         'center', 'subject', 'teacher'
     ).prefetch_related(
@@ -197,12 +245,12 @@ class ClassGroupDetailView(generics.RetrieveAPIView):
     lookup_field = 'id'
 
 
-class SessionAttendanceView(generics.RetrieveAPIView):
+class SessionAttendanceView(TeacherScopedMixin, generics.RetrieveAPIView):
     """
     GET /api/v1/sessions/{session_id}/attendance/
-    Retrieve session attendance list.
+    Retrieve session attendance list. Auto-scoped by logged-in teacher.
     """
-    permission_classes = [IsAuthenticated, IsAdminUser]
+    permission_classes = [IsTeacherOrAdmin]
     queryset = Session.objects.select_related('group').prefetch_related(
         'attendance_records__student'
     ).all()
@@ -210,30 +258,30 @@ class SessionAttendanceView(generics.RetrieveAPIView):
     lookup_field = 'id'
 
 
-class ExamListView(generics.ListAPIView):
+class ExamListView(TeacherScopedMixin, generics.ListAPIView):
     """
     GET /api/v1/exams/
-    List all exams. Allows filtering by class group and teacher.
+    List all exams. Auto-scoped by logged-in teacher.
     """
-    permission_classes = [IsAuthenticated, IsAdminUser]
+    permission_classes = [IsTeacherOrAdmin]
     queryset = Exam.objects.select_related('group__center', 'teacher').prefetch_related('results').all()
     serializer_class = ExamListSerializer
     filter_backends = [DjangoFilterBackend, SearchFilter, OrderingFilter]
     filterset_fields = [
         'group_id', 'group__center_id', 'group__subject_id',
         'group__academic_year_id', 'group__academic_year__level',
-        'exam_date', 'teacher_id', 'teacher__slug',
+        'exam_date',
     ]
     search_fields = ['name', 'group__name']
     ordering_fields = ['exam_date', 'name', 'max_score']
 
 
-class ExamDetailView(generics.RetrieveAPIView):
+class ExamDetailView(TeacherScopedMixin, generics.RetrieveAPIView):
     """
     GET /api/v1/exams/{id}/results/
-    Retrieve exam metadata and scores for all students.
+    Retrieve exam metadata and scores for all students. Auto-scoped by logged-in teacher.
     """
-    permission_classes = [IsAuthenticated, IsAdminUser]
+    permission_classes = [IsTeacherOrAdmin]
     queryset = Exam.objects.prefetch_related('results__student').all()
     serializer_class = ExamDetailSerializer
     lookup_field = 'id'
@@ -243,29 +291,38 @@ class DashboardStatsView(views.APIView):
     """
     GET /api/v1/dashboard/stats/
     Retrieve overview summary stats for the landing page.
-    Supports optional teacher filtering via ?teacher_id= or ?teacher_slug=
+    Auto-scoped by logged-in teacher. Superusers can optionally filter
+    via ?teacher_id= or ?teacher_slug=
     """
-    permission_classes = [IsAuthenticated, IsAdminUser]
+    permission_classes = [IsTeacherOrAdmin]
+
+    def _get_teacher_scope(self, request):
+        """Determine the teacher to scope data by, or None for all data."""
+        user = request.user
+        if not user.is_superuser and hasattr(user, 'teacher_profile'):
+            return user.teacher_profile
+        if user.is_superuser:
+            teacher_id = request.query_params.get('teacher_id')
+            teacher_slug = request.query_params.get('teacher_slug')
+            if teacher_id:
+                return Teacher.objects.filter(id=teacher_id).first()
+            elif teacher_slug:
+                return Teacher.objects.filter(slug=teacher_slug).first()
+        return None
 
     def get(self, request, *args, **kwargs):
-        teacher_id = request.query_params.get('teacher_id')
-        teacher_slug = request.query_params.get('teacher_slug')
+        teacher = self._get_teacher_scope(request)
 
         students_qs = Student.objects.all()
         groups_qs = ClassGroup.objects.all()
         centers_qs = AcademicCenter.objects.all()
         sessions_qs = Session.objects.all()
 
-        if teacher_id:
-            students_qs = students_qs.filter(teacher_id=teacher_id)
-            groups_qs = groups_qs.filter(teacher_id=teacher_id)
-            centers_qs = centers_qs.filter(teacher_id=teacher_id)
-            sessions_qs = sessions_qs.filter(teacher_id=teacher_id)
-        elif teacher_slug:
-            students_qs = students_qs.filter(teacher__slug=teacher_slug)
-            groups_qs = groups_qs.filter(teacher__slug=teacher_slug)
-            centers_qs = centers_qs.filter(teacher__slug=teacher_slug)
-            sessions_qs = sessions_qs.filter(teacher__slug=teacher_slug)
+        if teacher:
+            students_qs = students_qs.filter(teacher=teacher)
+            groups_qs = groups_qs.filter(teacher=teacher)
+            centers_qs = centers_qs.filter(teacher=teacher)
+            sessions_qs = sessions_qs.filter(teacher=teacher)
 
         today = timezone.localdate()
 
@@ -280,19 +337,19 @@ class DashboardStatsView(views.APIView):
 class DashboardLoginView(views.APIView):
     """
     POST /api/v1/login/
-    Authenticate a dashboard (admin/staff) user and return an auth token.
+    Authenticate a dashboard user (superuser or teacher) and return JWT tokens.
 
     Payload:
     {
-        "username": "admin",
+        "username": "teacher1",
         "password": "password"
     }
     """
     permission_classes = [AllowAny]
 
     def post(self, request, *args, **kwargs):
-        username = request.data.get('username', '').strip()
-        password = request.data.get('password', '')
+        username = str(request.data.get('username') or '').strip()
+        password = str(request.data.get('password') or '')
 
         if not username or not password:
             return Response(
@@ -307,24 +364,78 @@ class DashboardLoginView(views.APIView):
                 status=status.HTTP_401_UNAUTHORIZED
             )
 
-        # Ensure this user has staff/admin status
-        if not user.is_staff and not user.is_superuser:
+        # Allow superusers and users linked to a teacher
+        is_teacher = hasattr(user, 'teacher_profile') and user.teacher_profile is not None
+        if not user.is_superuser and not is_teacher:
             return Response(
-                {"error": "هذا الحساب ليس حساب مسؤول"},
+                {"error": "هذا الحساب ليس حساب مسؤول أو مدرس"},
                 status=status.HTTP_403_FORBIDDEN
             )
 
         refresh = RefreshToken.for_user(user)
 
-        return Response({
+        response_data = {
             "access": str(refresh.access_token),
             "refresh": str(refresh),
             "username": user.username,
             "is_superuser": user.is_superuser,
-            "first_name": user.first_name,
-            "last_name": user.last_name,
-            "email": user.email,
-        }, status=status.HTTP_200_OK)
+        }
+
+        # Include teacher profile info if the user is a teacher
+        if is_teacher:
+            teacher = user.teacher_profile
+            response_data["teacher"] = {
+                "id": str(teacher.id),
+                "name": teacher.name,
+                "slug": teacher.slug,
+            }
+
+        return Response(response_data, status=status.HTTP_200_OK)
+
+
+class DashboardChangePasswordView(views.APIView):
+    """
+    POST /api/v1/dashboard/change-password/
+    Allow a logged-in dashboard user (teacher or superuser) to change their password.
+
+    Payload:
+    {
+        "old_password": "current_password",
+        "new_password": "new_password"
+    }
+    """
+    permission_classes = [IsTeacherOrAdmin]
+
+    def post(self, request, *args, **kwargs):
+        old_password = request.data.get('old_password', '')
+        new_password = request.data.get('new_password', '')
+
+        if not old_password or not new_password:
+            return Response(
+                {"error": "يجب إدخال كلمة المرور القديمة والجديدة"},
+                status=status.HTTP_400_BAD_REQUEST
+            )
+
+        if len(new_password) < 6:
+            return Response(
+                {"error": "كلمة المرور الجديدة يجب أن تكون 6 أحرف على الأقل"},
+                status=status.HTTP_400_BAD_REQUEST
+            )
+
+        user = request.user
+        if not user.check_password(old_password):
+            return Response(
+                {"error": "كلمة المرور القديمة غير صحيحة"},
+                status=status.HTTP_400_BAD_REQUEST
+            )
+
+        user.set_password(new_password)
+        user.save()
+
+        return Response(
+            {"message": "تم تغيير كلمة المرور بنجاح"},
+            status=status.HTTP_200_OK
+        )
 
 
 # =============================================================================
@@ -508,25 +619,45 @@ def admin_import_dummy_data_view(request):
             messages.error(request, f"خطأ في قراءة ملف JSON: {str(e)}")
             return redirect('/admin/')
         
-        # Resolve teacher from payload
-        teacher_data = payload.get('teacher')
-        teacher, error = _resolve_or_create_teacher(teacher_data)
-        if error:
-            messages.error(request, f"خطأ في بيانات المدرس: {error}")
-            return redirect('/admin/')
-        
-        data = payload.get('data', {})
-        
-        success, upserted_counts, skipped_records, error_message = run_sync_upsert(data, teacher)
-        
-        if success:
-            summary = ", ".join([f"{k}: {v}" for k, v in upserted_counts.items() if v > 0])
-            msg = f"تم استيراد البيانات بنجاح للمدرس: {teacher.name}! السجلات: {summary or 'لا يوجد جديد'}"
-            if skipped_records:
-                msg += f" (تنبيه: تم تخطي {len(skipped_records)} سجل)"
-            messages.success(request, msg)
+        # Handle both single payload (dict) and multiple payloads (list)
+        if isinstance(payload, list):
+            payloads = payload
         else:
-            messages.error(request, f"فشل استيراد البيانات: {error_message}")
+            payloads = [payload]
+            
+        success_count = 0
+        total_upserted = {}
+        total_skipped = 0
+        errors = []
+        
+        for p in payloads:
+            # Resolve teacher from payload
+            teacher_data = p.get('teacher')
+            teacher, error = _resolve_or_create_teacher(teacher_data)
+            if error:
+                errors.append(f"مدرس {teacher_data.get('name', 'غير معروف')}: {error}")
+                continue
+            
+            data = p.get('data', {})
+            success, upserted_counts, skipped_records, error_message = run_sync_upsert(data, teacher)
+            
+            if success:
+                success_count += 1
+                total_skipped += len(skipped_records)
+                for k, v in upserted_counts.items():
+                    total_upserted[k] = total_upserted.get(k, 0) + v
+            else:
+                errors.append(f"مدرس {teacher.name}: {error_message}")
+        
+        if success_count > 0:
+            summary = ", ".join([f"{k}: {v}" for k, v in total_upserted.items() if v > 0])
+            msg = f"تم استيراد البيانات بنجاح لعدد {success_count} مدرس! السجلات المحدثة/المضافة: {summary or 'لا يوجد جديد'}"
+            if total_skipped > 0:
+                msg += f" (تنبيه: تم تخطي {total_skipped} سجل)"
+            messages.success(request, msg)
+            
+        if errors:
+            messages.error(request, f"بعض الأخطاء حدثت أثناء الاستيراد: {'; '.join(errors)}")
             
         return redirect('/admin/')
 
