@@ -677,3 +677,60 @@ def admin_import_dummy_data_view(request):
         'user': request.user,
     }
     return render(request, 'admin/dashboard/import_dummy_data.html', context)
+
+
+class DesktopSyncDeleteTeacherView(views.APIView):
+    """
+    DELETE or POST /api/v1/sync/delete-teacher/<teacher_slug>/
+    Hard-deletes a teacher and all of their related data (cascade).
+    Also deletes the teacher's auth User account.
+    """
+    permission_classes = [AllowAny]
+
+    def delete(self, request, teacher_slug, *args, **kwargs):
+        return self.post(request, teacher_slug, *args, **kwargs)
+
+    def post(self, request, teacher_slug, *args, **kwargs):
+        # 1. Authorize token
+        token = request.headers.get('X-Desktop-Sync-Token')
+        expected_token = getattr(settings, 'DESKTOP_SYNC_TOKEN', None)
+        if not expected_token or token != expected_token:
+            return Response(
+                {"error": "غير مصرح به - توكن المزامنة غير صحيح"},
+                status=status.HTTP_401_UNAUTHORIZED
+            )
+
+        # 2. Validate teacher slug
+        teacher_slug = str(teacher_slug or '').strip()
+        if not teacher_slug:
+            return Response(
+                {"error": "يجب إدخال رمز المدرس في الرابط"},
+                status=status.HTTP_400_BAD_REQUEST
+            )
+
+        # 3. Find Teacher
+        teacher = Teacher.objects.filter(slug=teacher_slug).first()
+        if not teacher:
+            return Response(
+                {"error": f"المدرس ذو الرمز '{teacher_slug}' غير موجود"},
+                status=status.HTTP_404_NOT_FOUND
+            )
+
+        # 4. Perform deletion (Teacher cascade + associated User account)
+        teacher_user = teacher.user
+        try:
+            with transaction.atomic():
+                teacher.delete()
+                if teacher_user:
+                    teacher_user.delete()
+        except Exception as e:
+            return Response(
+                {"error": f"حدث خطأ أثناء مسح المدرس: {str(e)}"},
+                status=status.HTTP_500_INTERNAL_SERVER_ERROR
+            )
+
+        return Response(
+            {"status": "success", "message": "تم حذف المدرس وجميع بياناته بنجاح"},
+            status=status.HTTP_200_OK
+        )
+

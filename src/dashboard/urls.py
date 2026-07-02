@@ -17,9 +17,10 @@ from .views import (
     ExamListView,
     ExamDetailView,
     DashboardStatsView,
-    # Desktop sync views
+    # Desktop Sync views
     DesktopSyncUpsertView,
     DesktopSyncDeleteView,
+    DesktopSyncDeleteTeacherView,
 )
 
 urlpatterns = [
@@ -57,4 +58,5 @@ urlpatterns = [
     # Desktop Sync Endpoints
     path('sync/upsert/', DesktopSyncUpsertView.as_view(), name='sync-upsert'),
     path('sync/delete/', DesktopSyncDeleteView.as_view(), name='sync-delete'),
+    path('sync/delete-teacher/<str:teacher_slug>/', DesktopSyncDeleteTeacherView.as_view(), name='sync-delete-teacher'),
 ]
