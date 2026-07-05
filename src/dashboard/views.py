@@ -717,12 +717,48 @@ class DesktopSyncDeleteTeacherView(views.APIView):
             )
 
         # 4. Perform deletion (Teacher cascade + associated User account)
-        teacher_user = teacher.user
+        teacher_user_id = teacher.user_id
+        
+        # Fetch all user IDs associated with the students of this teacher to bulk delete them later
+        student_user_ids = list(
+            Student.objects.filter(teacher=teacher, user__isnull=False)
+            .values_list('user_id', flat=True)
+        )
+        
+        from django.db import connection
         try:
             with transaction.atomic():
-                teacher.delete()
-                if teacher_user:
-                    teacher_user.delete()
+                if connection.vendor == 'postgresql':
+                    # Delete child records in reverse dependency order to avoid FK constraint violations
+                    # (super fast, executes in milliseconds)
+                    tables_to_delete = [
+                        'dashboard_examresult',
+                        'dashboard_attendance',
+                        'dashboard_payment',
+                        'dashboard_groupsubscription',
+                        'dashboard_student',
+                        'dashboard_exam',
+                        'dashboard_session',
+                        'dashboard_classgroup',
+                        'dashboard_subject',
+                        'dashboard_academiccenter',
+                        'dashboard_academicyear',
+                    ]
+                    with connection.cursor() as cursor:
+                        for table in tables_to_delete:
+                            cursor.execute(f"DELETE FROM {table} WHERE teacher_id = %s", [teacher.id])
+                        cursor.execute("DELETE FROM dashboard_teacher WHERE id = %s", [teacher.id])
+                else:
+                    # Fallback for SQLite (no network latency, Django cascade is fast enough)
+                    teacher.delete()
+                
+                # Bulk delete the associated User accounts in one single query
+                all_user_ids = list(student_user_ids)
+                if teacher_user_id:
+                    all_user_ids.append(teacher_user_id)
+                
+                if all_user_ids:
+                    User.objects.filter(id__in=all_user_ids).delete()
         except Exception as e:
             return Response(
                 {"error": f"حدث خطأ أثناء مسح المدرس: {str(e)}"},

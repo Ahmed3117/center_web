@@ -240,6 +240,16 @@ def run_sync_upsert(payload_data, teacher):
                         for s in Student.objects.filter(teacher=teacher, student_id__in=student_ids)
                     }
 
+                objs_to_upsert = []
+                student_creds_map = {}
+                model_field_names = {f.name for f in model_class._meta.fields}
+
+                # Pre-fetch existing model instances to preserve primary keys (id) and relations
+                existing_instances = {
+                    str(getattr(obj, 'student_id' if model_key == 'STUDENT' else 'desktop_id')): obj
+                    for obj in model_class.objects.filter(teacher=teacher)
+                }
+
                 for record in records:
                     desktop_id_val = record.get(desktop_id_field)
                     if not desktop_id_val:
@@ -315,26 +325,61 @@ def run_sync_upsert(payload_data, teacher):
                     # Set teacher on the record
                     upsert_data['teacher'] = teacher
 
-                    # Build the lookup kwargs for update_or_create
+                    # Build the constructor/lookup kwargs
                     if model_key == 'STUDENT':
                         lookup_kwargs = {'teacher': teacher, 'student_id': desktop_id_val}
                     else:
                         lookup_kwargs = {'teacher': teacher, 'desktop_id': desktop_id_val}
-                        # Also store the desktop_id in defaults if not in lookup
-                        # (desktop_id is in lookup, not defaults)
 
-                    obj, created = model_class.objects.update_or_create(
-                        **lookup_kwargs,
-                        defaults=upsert_data
+                    # Filter clean fields only
+                    constructor_kwargs = {**lookup_kwargs, **upsert_data}
+
+                    # Reuse existing PK and relations if updating to prevent duplicate insert/returning mismatch
+                    existing_obj = existing_instances.get(desktop_id_val)
+                    if existing_obj:
+                        constructor_kwargs['id'] = existing_obj.id
+                        if model_key == 'STUDENT':
+                            if existing_obj.user_id:
+                                constructor_kwargs['user'] = existing_obj.user
+                            if existing_obj.password_hash:
+                                constructor_kwargs['password_hash'] = existing_obj.password_hash
+
+                    clean_constructor_kwargs = {k: v for k, v in constructor_kwargs.items() if k in model_field_names}
+
+                    # Instantiate object (autogenerating UUID primary key if needed)
+                    obj = model_class(**clean_constructor_kwargs)
+                    objs_to_upsert.append(obj)
+
+                    if model_key == 'STUDENT':
+                        student_creds_map[desktop_id_val] = (student_username, student_password)
+
+                if objs_to_upsert:
+                    # Determine update fields and unique fields for bulk_create
+                    update_fields = [
+                        f.name for f in model_class._meta.fields
+                        if not f.primary_key and f.name not in ['teacher', 'desktop_id', 'student_id', 'user', 'password_hash']
+                    ]
+                    if model_key == 'STUDENT':
+                        unique_fields = ['teacher_id', 'student_id']
+                    else:
+                        unique_fields = ['teacher_id', 'desktop_id']
+
+                    upserted_objs = model_class.objects.bulk_create(
+                        objs_to_upsert,
+                        update_conflicts=True,
+                        unique_fields=unique_fields,
+                        update_fields=update_fields
                     )
-                    upserted_counts[model_key] += 1
 
-                    # Collect student user tasks for batch processing (NOT inline)
-                    if model_key == 'STUDENT' and student_username is not None:
-                        student_user_tasks.append((obj, student_username, student_password))
+                    upserted_counts[model_key] += len(upserted_objs)
+
+                    if model_key == 'STUDENT':
+                        for obj in upserted_objs:
+                            creds = student_creds_map.get(obj.student_id)
+                            if creds:
+                                student_user_tasks.append((obj, creds[0], creds[1]))
 
             # Batch process all student user accounts at end of transaction
-            # Password hashing is done OUTSIDE the DB lock via make_password()
             _batch_handle_student_users(student_user_tasks, teacher)
 
         return True, upserted_counts, skipped_records, None
