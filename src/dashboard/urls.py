@@ -1,10 +1,11 @@
 from django.urls import path
 from .views import (
     # Public views
-    TeacherPublicListView,
+    TeacherPublicDetailView,
     # Dashboard / Admin views
     DashboardLoginView,
     DashboardChangePasswordView,
+    TeacherProfileView,
     AcademicYearListView,
     SubjectListView,
     TeacherListView,
@@ -25,11 +26,12 @@ from .views import (
 
 urlpatterns = [
     # Public Endpoints (no auth required)
-    path('public/teachers/', TeacherPublicListView.as_view(), name='teacher-public-list'),
+    path('public/teachers/<str:slug>/', TeacherPublicDetailView.as_view(), name='teacher-public-detail'),
 
     # Dashboard Authentication
     path('login/', DashboardLoginView.as_view(), name='dashboard-login'),
     path('dashboard/change-password/', DashboardChangePasswordView.as_view(), name='dashboard-change-password'),
+    path('teacher/profile/', TeacherProfileView.as_view(), name='teacher-profile'),
 
     # Dashboard Overview Stats
     path('dashboard/stats/', DashboardStatsView.as_view(), name='dashboard-stats'),

@@ -17,10 +17,20 @@ from .models import (
 
 @admin.register(Teacher)
 class TeacherAdmin(admin.ModelAdmin):
-    list_display = ('name', 'slug', 'user', 'id')
-    search_fields = ('name', 'slug', 'user__username')
+    list_display = ('name', 'slug', 'user', 'image', 'id')
+    search_fields = ('name', 'slug', 'user__username', 'bio')
     readonly_fields = ('id', 'slug')
     raw_id_fields = ('user',)
+    fieldsets = (
+        ("المعلومات الأساسية", {
+            'fields': ('id', 'name', 'slug', 'user', 'bio', 'image')
+        }),
+        ("روابط التواصل الاجتماعي", {
+            'fields': ('facebook_url', 'linkedin_url', 'instagram_url', 'youtube_url', 'telegram_url', 'tweeter_url')
+        }),
+    )
+
+
 
 
 @admin.register(AcademicYear)

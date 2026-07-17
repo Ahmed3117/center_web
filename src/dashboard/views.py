@@ -41,6 +41,7 @@ from .serializers import (
     SessionAttendanceSerializer,
     ExamListSerializer,
     ExamDetailSerializer,
+    TeacherProfileSerializer,
 )
 
 logger = logging.getLogger(__name__)
@@ -93,18 +94,16 @@ class TeacherScopedMixin:
 #  PUBLIC VIEWS  (no auth required)
 # =============================================================================
 
-class TeacherPublicListView(generics.ListAPIView):
+class TeacherPublicDetailView(generics.RetrieveAPIView):
     """
-    GET /api/v1/public/teachers/
-    List all teachers — used by students on the homepage to select a teacher.
+    GET /api/v1/public/teachers/<str:slug>/
+    Retrieve a single teacher's public profile details by their unique slug.
     """
     permission_classes = [AllowAny]
     queryset = Teacher.objects.all()
     serializer_class = TeacherPublicSerializer
-    filter_backends = [SearchFilter, OrderingFilter]
-    search_fields = ['name']
-    ordering_fields = ['name']
-    pagination_class = None  # No pagination for public teacher list
+    lookup_field = 'slug'
+
 
 
 # =============================================================================
@@ -436,6 +435,24 @@ class DashboardChangePasswordView(views.APIView):
             {"message": "تم تغيير كلمة المرور بنجاح"},
             status=status.HTTP_200_OK
         )
+
+
+class TeacherProfileView(generics.RetrieveUpdateAPIView):
+    """
+    GET /api/v1/teacher/profile/
+    PUT/PATCH /api/v1/teacher/profile/
+    Retrieve or update the logged-in teacher's profile details.
+    """
+    permission_classes = [IsTeacherOrAdmin]
+    serializer_class = TeacherProfileSerializer
+
+    def get_object(self):
+        user = self.request.user
+        teacher = getattr(user, 'teacher_profile', None)
+        if not teacher:
+            from rest_framework.exceptions import ValidationError
+            raise ValidationError("هذا الحساب ليس لديه ملف مدرس مرتبط به.")
+        return teacher
 
 
 # =============================================================================

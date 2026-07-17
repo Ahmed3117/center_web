@@ -20,6 +20,16 @@ class Teacher(models.Model):
         related_name='teacher_profile',
         verbose_name="حساب المستخدم"
     )
+    bio = models.TextField(blank=True, null=True, verbose_name="نبذة عن المدرس")
+    image = models.ImageField(upload_to="teachers/", blank=True, null=True, verbose_name="صورة المدرس")
+    facebook_url = models.URLField(blank=True, null=True, verbose_name="رابط فيسبوك")
+    linkedin_url = models.URLField(blank=True, null=True, verbose_name="رابط لينكد إن")
+    instagram_url = models.URLField(blank=True, null=True, verbose_name="رابط إنستجرام")
+    youtube_url = models.URLField(blank=True, null=True, verbose_name="رابط يوتيوب")
+    telegram_url = models.URLField(blank=True, null=True, verbose_name="رابط تليجرام")
+    tweeter_url = models.URLField(blank=True, null=True, verbose_name="رابط تويتر")
+
+
 
     class Meta:
         verbose_name = "المدرس"

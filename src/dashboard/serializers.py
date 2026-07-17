@@ -21,7 +21,11 @@ class TeacherPublicSerializer(serializers.ModelSerializer):
     """Public teacher info — used on homepage for students to select a teacher"""
     class Meta:
         model = Teacher
-        fields = ['id', 'name', 'slug']
+        fields = [
+            'id', 'name', 'slug', 'image', 'bio',
+            'facebook_url', 'linkedin_url', 'instagram_url',
+            'youtube_url', 'telegram_url', 'tweeter_url'
+        ]
 
 
 class AcademicYearSerializer(serializers.ModelSerializer):
@@ -47,7 +51,24 @@ class SubjectSerializer(serializers.ModelSerializer):
 class TeacherSerializer(serializers.ModelSerializer):
     class Meta:
         model = Teacher
-        fields = ['id', 'name', 'slug']
+        fields = [
+            'id', 'name', 'slug', 'image', 'bio',
+            'facebook_url', 'linkedin_url', 'instagram_url',
+            'youtube_url', 'telegram_url', 'tweeter_url'
+        ]
+
+
+class TeacherProfileSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = Teacher
+        fields = [
+            'id', 'name', 'slug', 'image', 'bio',
+            'facebook_url', 'linkedin_url', 'instagram_url',
+            'youtube_url', 'telegram_url', 'tweeter_url'
+        ]
+        read_only_fields = ['id', 'slug']
+
+
 
 
 
